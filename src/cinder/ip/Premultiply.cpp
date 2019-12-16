@@ -23,7 +23,6 @@
 #include "cinder/ip/Premultiply.h"
 #include "cinder/ChanTraits.h"
 
-#include <boost/preprocessor/seq.hpp>
 #include <algorithm>
 
 namespace cinder { namespace ip {
@@ -39,7 +38,7 @@ void premultiply( SurfaceT<T> *surface )
 
 	surface->setPremultiplied( true );
 
-	int32_t rowBytes = surface->getRowBytes();
+	ptrdiff_t rowBytes = surface->getRowBytes();
 	uint8_t pixelInc = surface->getPixelInc();
 	uint8_t redOffset = surface->getRedOffset(), greenOffset = surface->getGreenOffset(), blueOffset = surface->getBlueOffset(), alphaOffset = surface->getAlphaOffset();
 	for( int32_t y = clippedArea.getY1(); y < clippedArea.getY2(); ++y ) {
@@ -67,7 +66,7 @@ void unpremultiply<uint8_t>( SurfaceT<uint8_t> *surface )
 
 	surface->setPremultiplied( false );
 
-	int32_t rowBytes = surface->getRowBytes();
+	ptrdiff_t rowBytes = surface->getRowBytes();
 	uint8_t pixelInc = surface->getPixelInc();
 	uint8_t redOffset = surface->getRedOffset(), greenOffset = surface->getGreenOffset(), blueOffset = surface->getBlueOffset(), alphaOffset = surface->getAlphaOffset();
 	for( int32_t y = clippedArea.getY1(); y < clippedArea.getY2(); ++y ) {
@@ -96,7 +95,7 @@ void unpremultiply<float>( SurfaceT<float> *surface )
 
 	surface->setPremultiplied( false );
 
-	int32_t rowBytes = surface->getRowBytes();
+	ptrdiff_t rowBytes = surface->getRowBytes();
 	uint8_t pixelInc = surface->getPixelInc();
 	uint8_t redOffset = surface->getRedOffset(), greenOffset = surface->getGreenOffset(), blueOffset = surface->getBlueOffset(), alphaOffset = surface->getAlphaOffset();
 	for( int32_t y = clippedArea.getY1(); y < clippedArea.getY2(); ++y ) {
@@ -114,12 +113,8 @@ void unpremultiply<float>( SurfaceT<float> *surface )
 	}	
 }
 
-
-
-#define premult_PROTOTYPES(r,data,T)\
-	template void premultiply( SurfaceT<T> *Surface );
-
-BOOST_PP_SEQ_FOR_EACH( premult_PROTOTYPES, ~, CHANNEL_TYPES )
-	
+template CI_API void premultiply( SurfaceT<uint8_t> *Surface );
+template CI_API void premultiply( SurfaceT<uint16_t> *Surface );
+template CI_API void premultiply( SurfaceT<float> *Surface );	
 
 } } // namespace cinder::ip

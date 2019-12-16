@@ -21,6 +21,9 @@
  POSSIBILITY OF SUCH DAMAGE.
 */
 
+#include "cinder/Cinder.h"
+#if ( _WIN32_WINNT >= _WIN32_WINNT_VISTA )
+
 #include "cinder/audio/msw/FileMediaFoundation.h"
 #include "cinder/audio/dsp/Converter.h"
 #include "cinder/audio/Exception.h"
@@ -82,7 +85,7 @@ size_t getBytesPerSample( SampleType sampleType )
 } // anonymous namespace
 
 // ----------------------------------------------------------------------------------------------------
-// MARK: - SourceFileMediaFoundation
+// SourceFileMediaFoundation
 // ----------------------------------------------------------------------------------------------------
 
 SourceFileMediaFoundation::SourceFileMediaFoundation()
@@ -116,44 +119,44 @@ size_t SourceFileMediaFoundation::performRead( Buffer *buffer, size_t bufferFram
 
 	size_t readCount = 0;
 	while( readCount < numFramesNeeded ) {
-
 		// first drain any frames that were previously read from an IMFSample
 		if( mFramesRemainingInReadBuffer ) {
 			size_t remainingToDrain = std::min( mFramesRemainingInReadBuffer, numFramesNeeded );
-
-			// TODO: use Buffer::copyChannel
-			for( size_t ch = 0; ch < mNumChannels; ch++ ) {
-				float *readChannel = mReadBuffer.getChannel( ch ) + mReadBufferPos;
-				float *resultChannel = buffer->getChannel( ch );
-				memcpy( resultChannel + readCount, readChannel, remainingToDrain * sizeof( float ) );
-			}
+			size_t writeOffset = bufferFrameOffset + readCount;
+			buffer->copyOffset( mReadBuffer, remainingToDrain, writeOffset, mReadBufferPos );
 
 			mReadBufferPos += remainingToDrain;
 			mFramesRemainingInReadBuffer -= remainingToDrain;
 			readCount += remainingToDrain;
-			continue;
+			continue; // check if we've filled the requested number of frames
 		}
 
 		CI_ASSERT( ! mFramesRemainingInReadBuffer );
 
 		mReadBufferPos = 0;
-		size_t outNumFrames = processNextReadSample();
-		if( ! outNumFrames )
-			break;
-
-		// if the IMFSample num frames is over the specified buffer size, 
-		// record how many samples are left over and use up what was asked for.
-		if( outNumFrames + readCount > numFramesNeeded ) {
+		bool endOfFile;
+		size_t outNumFrames = processNextReadSample( &endOfFile );
+		if( ! outNumFrames ) {
+			if( endOfFile ) {
+				// Whoops, IMFSourceReader::ReadSample() must of reported EOF before we reached the expected number of frames. I've seen this happen with mp3s.
+				// - so we'll just zero out the remaining frames, so the SourceFile receives the expected number of frames as reported when parsing the header.
+				mReadBuffer.zero();
+				outNumFrames = numFramesNeeded - readCount;
+			}
+			else {
+				CI_LOG_W( "Could not read the expected number of samples: " << numFramesNeeded << ", readCount: " << readCount );
+				break;
+			}
+		}
+		else if( outNumFrames + readCount > numFramesNeeded ) {
+			// if the IMFSample num frames is over the specified buffer size, 
+			// record how many samples are left over and use up what was asked for.
 			mFramesRemainingInReadBuffer = outNumFrames + readCount - numFramesNeeded;
 			outNumFrames = numFramesNeeded - readCount;
 		}
 
-		size_t offset = bufferFrameOffset + readCount;
-		for( size_t ch = 0; ch < mNumChannels; ch++ ) {
-			float *readChannel = mReadBuffer.getChannel( ch );
-			float *resultChannel = buffer->getChannel( ch );
-			memcpy( resultChannel + readCount, readChannel, outNumFrames * sizeof( float ) );
-		}
+		size_t writeOffset = bufferFrameOffset + readCount;
+		buffer->copyOffset( mReadBuffer, outNumFrames, writeOffset, 0 );
 
 		mReadBufferPos += outNumFrames;
 		readCount += outNumFrames;
@@ -291,11 +294,12 @@ void SourceFileMediaFoundation::initReader()
 	mCanSeek = ( ( flags & MFMEDIASOURCE_CAN_SEEK ) == MFMEDIASOURCE_CAN_SEEK );
 }
 
-size_t SourceFileMediaFoundation::processNextReadSample()
+size_t SourceFileMediaFoundation::processNextReadSample( bool *endOfFile )
 {
 	::IMFSample *mediaSample;
 	DWORD streamFlags = 0;
 	LONGLONG timeStamp;
+	*endOfFile = false;
 	HRESULT hr = mSourceReader->ReadSample( MF_SOURCE_READER_FIRST_AUDIO_STREAM, 0, NULL, &streamFlags, &timeStamp, &mediaSample );
 	CI_ASSERT( hr == S_OK );
 
@@ -304,7 +308,7 @@ size_t SourceFileMediaFoundation::processNextReadSample()
 		return 0;
 	}
 	if( streamFlags & MF_SOURCE_READERF_ENDOFSTREAM ) {
-		// end of file
+		*endOfFile = true;
 		return 0;
 	}
 	if( ! mediaSample ) {
@@ -399,11 +403,11 @@ vector<std::string> SourceFileMediaFoundation::getSupportedExtensions()
 }
 
 // ----------------------------------------------------------------------------------------------------
-// MARK: - TargetFileMediaFoundation
+// TargetFileMediaFoundation
 // ----------------------------------------------------------------------------------------------------
 
 TargetFileMediaFoundation::TargetFileMediaFoundation( const DataTargetRef &dataTarget, size_t sampleRate, size_t numChannels, SampleType sampleType, const std::string &extension )
-	: TargetFile( dataTarget, sampleRate, numChannels, sampleType ), mStreamIndex( 0 )
+	: TargetFile( sampleRate, numChannels, sampleType ), mStreamIndex( 0 )
 {
 	MediaFoundationInitializer::initMediaFoundation();
 
@@ -419,9 +423,9 @@ TargetFileMediaFoundation::TargetFileMediaFoundation( const DataTargetRef &dataT
 	mSinkWriter = ci::msw::makeComUnique( sinkWriter );
 
 	mSampleSize = getBytesPerSample( mSampleType );
-	const UINT32 bitsPerSample = 8 * mSampleSize;
-	const WORD blockAlignment = mNumChannels * mSampleSize;
-	const DWORD averageBytesPerSecond = mSampleRate * blockAlignment;
+	const auto bitsPerSample = 8 * mSampleSize;
+	const auto blockAlignment = mNumChannels * mSampleSize;
+	const auto averageBytesPerSecond = mSampleRate * blockAlignment;
 
 	// Set the output media type.
 
@@ -437,19 +441,19 @@ TargetFileMediaFoundation::TargetFileMediaFoundation( const DataTargetRef &dataT
 	hr = mediaType->SetGUID( MF_MT_SUBTYPE, audioFormat );
 	CI_ASSERT( hr == S_OK );
 
-	hr = mediaType->SetUINT32( MF_MT_AUDIO_SAMPLES_PER_SECOND, (UINT32)mSampleRate );
+	hr = mediaType->SetUINT32( MF_MT_AUDIO_SAMPLES_PER_SECOND, static_cast<UINT32>( mSampleRate ) );
 	CI_ASSERT( hr == S_OK );
 
-	hr = mediaType->SetUINT32( MF_MT_AUDIO_BITS_PER_SAMPLE, bitsPerSample );
+	hr = mediaType->SetUINT32( MF_MT_AUDIO_BITS_PER_SAMPLE, static_cast<UINT32>( bitsPerSample ) );
 	CI_ASSERT( hr == S_OK );
 
-	hr = mediaType->SetUINT32( MF_MT_AUDIO_BLOCK_ALIGNMENT, blockAlignment );
+	hr = mediaType->SetUINT32( MF_MT_AUDIO_BLOCK_ALIGNMENT, static_cast<UINT32>( blockAlignment ) );
 	CI_ASSERT( hr == S_OK );
 
-	hr = mediaType->SetUINT32( MF_MT_AUDIO_AVG_BYTES_PER_SECOND, averageBytesPerSecond );
+	hr = mediaType->SetUINT32( MF_MT_AUDIO_AVG_BYTES_PER_SECOND, static_cast<UINT32>( averageBytesPerSecond ) );
 	CI_ASSERT( hr == S_OK );
 
-	hr = mediaType->SetUINT32( MF_MT_AUDIO_NUM_CHANNELS, (UINT32)mNumChannels );
+	hr = mediaType->SetUINT32( MF_MT_AUDIO_NUM_CHANNELS, static_cast<UINT32>( mNumChannels ) );
 	CI_ASSERT( hr == S_OK );
 
 	hr = mediaType->SetUINT32( MF_MT_ALL_SAMPLES_INDEPENDENT, 1 );
@@ -468,9 +472,9 @@ TargetFileMediaFoundation::TargetFileMediaFoundation( const DataTargetRef &dataT
 
 TargetFileMediaFoundation::~TargetFileMediaFoundation()
 {
-	if( mSinkWriter ) {
+	if( mSinkWriter && mSamplesWritten ) {
 		HRESULT hr = mSinkWriter->Finalize();
-		CI_ASSERT( hr == S_OK );
+		CI_VERIFY( hr == S_OK );
 	}
 }
 
@@ -495,7 +499,7 @@ void TargetFileMediaFoundation::performWrite( const Buffer *buffer, size_t numFr
 
 	// create media buffer and fill with audio samples.
 
-	DWORD bufferSizeBytes = numFrames * buffer->getNumChannels() * mSampleSize;
+	const DWORD bufferSizeBytes = static_cast<DWORD>( numFrames * buffer->getNumChannels() * mSampleSize );
 	::IMFMediaBuffer *mediaBuffer;
 	hr = ::MFCreateMemoryBuffer( bufferSizeBytes, &mediaBuffer );
 	CI_ASSERT( hr == S_OK );
@@ -542,10 +546,12 @@ void TargetFileMediaFoundation::performWrite( const Buffer *buffer, size_t numFr
 
 	hr = mSinkWriter->WriteSample( mStreamIndex, mediaSample );
 	CI_ASSERT( hr == S_OK );
+
+	mSamplesWritten = true;
 }
 
 // ----------------------------------------------------------------------------------------------------
-// MARK: - MediaFoundationImpl (Startup / Shutdown)
+// MediaFoundationImpl (Startup / Shutdown)
 // ----------------------------------------------------------------------------------------------------
 
 // static
@@ -553,6 +559,7 @@ void MediaFoundationInitializer::initMediaFoundation()
 {
 	if( ! sIsMfInitialized ) {
 		sIsMfInitialized = true;
+		ci::msw::initializeCom();
 		HRESULT hr = ::MFStartup( MF_VERSION );
 		CI_ASSERT( hr == S_OK );
 	}
@@ -569,3 +576,5 @@ void MediaFoundationInitializer::shutdownMediaFoundation()
 }
 
 } } } // namespace cinder::audio::msw
+
+#endif // ( _WIN32_WINNT >= 0x0600 )

@@ -242,7 +242,6 @@ span.slash
 	min-height: 250px
 
 .content-row
-	
 	background: #fff
 
 	> .columns
@@ -256,14 +255,8 @@ span.slash
 
 // prose for reference and guide pages
 .content, body#guide-contents
-	// background: white
 	height: auto
-		
-	// padding-top: 40px
-	// font-size: 0.8em
-	// line-height: 1em
-
-		
+			
 	section
 		margin-bottom: 3em
 
@@ -479,7 +472,7 @@ body.classes
 				&:nth-child(odd)
 					background: #f8f8f8	
 					
-					&.expandable:hover
+					&.expandable:not(.hidden):hover
 						animation: fade-odd 1.5s
 					
 				&.expandable
@@ -839,6 +832,9 @@ button.interactive-guide
 	position: relative;
 	z-index: 0
 	
+	> .content
+		padding: 40px 0
+
 	ul.rows 
 		padding: 0
 		text-indent: 0
@@ -986,7 +982,7 @@ $border-height = 3px
 			right: 0;
 			z-index: 99999;
 			overflow-x: hidden;
-			overflow-y: scroll;
+			overflow-y: auto;
 			top: 30px;
 			border-radius: 0 0 10px 10px;
 			width: 400px;
@@ -1004,7 +1000,7 @@ $border-height = 3px
 			h5
 				display: inline-block
 				background: $light-gray-text
-				margin: 10px
+				margin: 5px
 				padding: 5px 10px
 				font-size: 12px
 				font-weight: 700
@@ -1053,7 +1049,7 @@ $border-height = 3px
 				bottom 0
 				width: 100%;
 				background: $light-gray-text
-				padding: 10px 0;
+				padding: 5px 0;
 				margin: 0 auto;
 				text-align: center;
 				font-size: 12px;
@@ -1066,7 +1062,8 @@ $border-height = 3px
 						color: white
 
 ul.library-features
-			
+	
+	plain-ul()
 	margin-top: 20px;
 
 	li

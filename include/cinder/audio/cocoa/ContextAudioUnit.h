@@ -25,6 +25,7 @@
 
 #include "cinder/audio/Context.h"
 #include "cinder/audio/dsp/RingBuffer.h"
+#include "cinder/audio/dsp/Converter.h"
 #include "cinder/audio/cocoa/CinderCoreAudio.h"
 
 #include <AudioUnit/AudioUnit.h>
@@ -96,10 +97,10 @@ class InputDeviceNodeAudioUnit : public InputDeviceNode, public NodeAudioUnit {
 	static OSStatus inputCallback( void *data, ::AudioUnitRenderActionFlags *flags, const ::AudioTimeStamp *timeStamp, UInt32 bus, UInt32 numFrames, ::AudioBufferList *bufferList );
 
 	dsp::RingBuffer						mRingBuffer;
-	size_t								mRingBufferPaddingFactor;
+	std::unique_ptr<dsp::Converter>		mConverter;
+	BufferDynamic						mReadBuffer, mConvertedReadBuffer;
 	AudioBufferListPtr					mBufferList;
 	bool								mSynchronousIO;
-
 };
 
 // TODO: when stopped / mEnabled = false; kAudioUnitProperty_BypassEffect should be used

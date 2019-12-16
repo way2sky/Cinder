@@ -47,8 +47,9 @@ from pystache.renderer import Renderer, Loader
 
 # static path vars
 BASE_PATH = os.path.dirname(os.path.realpath(__file__)) + os.sep
+HTML_ROOT_DIR = 'html'
 XML_SOURCE_PATH = BASE_PATH + 'xml' + os.sep
-HTML_DEST_PATH = BASE_PATH + 'html' + os.sep
+HTML_DEST_PATH = BASE_PATH + HTML_ROOT_DIR + os.sep
 HTML_SOURCE_PATH = BASE_PATH + 'htmlsrc' + os.sep
 TEMPLATE_PATH = BASE_PATH + 'htmlsrc' + os.sep + "_templates" + os.sep
 PARENT_DIR = BASE_PATH.split(os.sep + 'docs')[0]
@@ -67,10 +68,16 @@ parser.add_argument('path', nargs='?')
 parser.add_argument('outpath', nargs='?')
 parser.add_argument('-d', '--debug',
     action='store_true',
-    help='show debug arguments' )
+    help='show debug arguments')
 parser.add_argument('-s', '--skiphtml',
     action='store_true',
-    help='skip html generation' )
+    help='skip html generation')
+parser.add_argument('--root',
+    default=HTML_ROOT_DIR,
+    help='server html root directory name')
+parser.add_argument('--include-analytics',
+    action='store_true',
+    help='bool as to wheather to include analytics in frontend')
 
 
 # various config settings
@@ -332,16 +339,8 @@ class SymbolMap(object):
             self.name = name
             self.path = path
             self.typedefs = typedefs
-            self.githubPath = None
-            self.relPath = "".join(self.path.split(PARENT_DIR))
-            # path to show when displaying include path. We don't want to show the word "include" since it's implied
-            self.includePath = "".join(self.relPath.split(os.sep + "include"))[1:]
-
-            rel_path_arr = self.path.split(PARENT_DIR)
-            if len(rel_path_arr) > 1:
-                self.githubPath = config.GITHUB_PATH + self.path.split(PARENT_DIR)[-1]
-            else:
-                log("NO PATH FOR " + name, 1 )
+            rel_path_arr = self.path.split(PARENT_DIR.replace("\\", "/"))
+            self.relPath = "".join(rel_path_arr)           
 
     class Enum(object):
         def __init__(self, name, path):
@@ -784,7 +783,7 @@ class ClassFileData(FileData):
         for index, ns in enumerate(ns_list[:-1]):
             ns_object = g_symbolMap.find_namespace("::".join(ns_list[0:index + 1]))
             if ns_object:
-                ns_link = LinkData(os.path.join(HTML_DEST_PATH, ns_object.path), ns)
+                ns_link = LinkData(path_join(HTML_DEST_PATH, ns_object.path), ns)
             else:
                 # add inactive link data
                 ns_link = LinkData("", ns, False)
@@ -1091,37 +1090,6 @@ class LinkData(object):
 # ==================================================================================================== Utility functions
 
 
-def convert_rel_path(link, src_dir, dest_dir):
-    """
-    Converts a relative path from one directory to another
-    :param link: Link to convert
-    :param src_dir: current relative directory
-    :param dest_dir: destination relative directory
-    :return: link with new relative path
-    """
-
-    if link.startswith("http") or link.startswith("javascript:"):
-        return link
-
-    # if a relative path, make it absolute
-    if src_dir.find(BASE_PATH) < 0:
-        src_dir = BASE_PATH + src_dir
-
-    # get absolute in path, converted from htmlsrc to html
-    # abs_link_path =
-    abs_src_path = urljoin(src_dir, link).replace("htmlsrc", "html")
-
-    # destination absolute path
-    # abs_dest_path = os.path.join(os.path.dirname(dest_dir), link)
-    abs_dest_path = dest_dir
-
-    # print "ABS SRC:  " + abs_src_path
-    # print "ABS DEST: " + abs_dest_path
-
-    new_link = os.path.relpath(abs_src_path, abs_dest_path)
-    # print "new link: " + new_link
-    return new_link
-
 def find_compound_name(tree):
     for compound_def in tree.iter("compounddef"):
         for compound_name in compound_def.iter("compoundname"):
@@ -1273,7 +1241,7 @@ def gen_rel_link_tag(bs4, text, link, src_dir, dest_dir):
     # make sure they are dirs
     src_dir = os.path.dirname(src_dir) + os.sep
     dest_dir = os.path.dirname(dest_dir) + os.sep
-    new_link = convert_rel_path(link, src_dir, dest_dir)
+    new_link = relative_url(dest_dir, link)
     link_tag = gen_link_tag(bs4, text, new_link)
     return link_tag
 
@@ -1515,7 +1483,7 @@ def gen_class_hierarchy(bs4, class_def):
         if index < len(hierarchy) - 1:
             a = gen_tag(bs4, "a", [], base.qualifiedName)
             define_link_tag(a, {'href': base.path})
-            a = gen_link_tag(bs4, base.qualifiedName, os.path.join(HTML_DEST_PATH, a["href"]))
+            a = gen_link_tag(bs4, base.qualifiedName, path_join(HTML_DEST_PATH, a["href"]))
             li.append(a)
         else:
             li.append(base.qualifiedName)
@@ -1658,23 +1626,30 @@ def replace_code_chunks(bs4):
     :param bs4:
     :return:
     """
+
     # find all the code chunks
     code_chunks = bs4.find_all("div", "programlisting")
+    code_chunks += bs4.find_all("span", "programlisting")
+
     for chunk in code_chunks:
         pre_tag = bs4.new_tag("pre")
         code_tag = bs4.new_tag("code")
         add_class_to_tag(code_tag, "language-cpp")
 
         # for each code line, add a line of that text to the new div
-        for line in chunk.find("div", "codeline"):
-            line_text = ""
-            for c in line.contents:
-                if type(c) is Tag:
-                    line_text += c.text
-                else:
-                    line_text += c
-            code_tag.append(line_text + "\n")
-        pre_tag.append(code_tag)
+        codeline = chunk.find_all("div", "codeline")
+        codeline += chunk.find_all("span", "codeline")
+
+        if codeline:
+            for line in codeline:
+                line_text = ""
+                for c in line.contents:
+                    if type(c) is Tag:
+                        line_text += c.text
+                    else:
+                        line_text += c
+                code_tag.append(line_text + "\n")
+            pre_tag.append(code_tag)
 
         # replace content in code chunks
         chunk.clear()
@@ -1769,7 +1744,7 @@ def iterate_namespace(bs4, namespaces, tree, index, label):
         ns_li["data-namespace"] = namespace
 
         # create link for each item
-        a_tag = gen_link_tag(bs4, name, HTML_SOURCE_PATH + ns.path)
+        a_tag = gen_link_tag(bs4, name, path_join(HTML_SOURCE_PATH, ns.path))
 
         # is decendent of parent namespace
         if prefix == parent_ns:
@@ -1984,8 +1959,7 @@ def parse_namespaces(tree, sections):
     namespaces = []
     if config.is_section_whitelisted(sections, "namespaces"):
         for member in tree.findall(r"compounddef/innernamespace"):
-            # link = convert_rel_path(member.attrib["refid"] + ".html", TEMPLATE_PATH, DOXYGEN_HTML_PATH)
-            link = HTML_DEST_PATH + member.attrib["refid"] + ".html"
+            link = path_join(HTML_DEST_PATH, member.attrib["refid"] + ".html")
             link_data = LinkData(link, member.text)
             namespaces.append(link_data)
     return namespaces
@@ -1996,7 +1970,7 @@ def parse_classes(tree, sections):
     if config.is_section_whitelisted(sections, "classes"):
         for member in tree.findall(r"compounddef/innerclass[@prot='public']"):
             link = member.attrib["refid"] + ".html"
-            rel_link = HTML_DEST_PATH + link
+            rel_link = path_join(HTML_DEST_PATH, link)
             link_data = LinkData(rel_link, member.text)
 
             kind = "struct" if link.startswith("struct") else "class"
@@ -2078,7 +2052,11 @@ def fill_class_content(tree):
     file_data = ClassFileData(tree)
 
     include_file = ""
+    include_path = ""
     include_tag = tree.find(r"compounddef/includes")
+    location_tag = tree.find(r"compounddef/location")
+    if location_tag is not None:
+        include_path = "/".join(location_tag.attrib["file"].split("/")[1:])
     if include_tag is not None:
         include_file = include_tag.text
     class_name = file_data.name
@@ -2115,10 +2093,11 @@ def fill_class_content(tree):
 
     # includes ------------------------------------------ #
     include_link = None
-    if include_file:
+    if include_file and include_path:
         file_obj = g_symbolMap.find_file(include_file)
+        github_path = config.GITHUB_PATH + '/include/' + include_path
         if file_obj:
-            include_link = LinkData(file_obj.githubPath, file_obj.includePath)
+            include_link = LinkData(github_path, include_path)
 
     file_data.includes = include_link
 
@@ -2131,7 +2110,7 @@ def fill_class_content(tree):
             for t in class_typedefs:
                 link_data = LinkData()
                 link_data.label = t.name
-                link_path = HTML_DEST_PATH + t.path
+                link_path = path_join(HTML_DEST_PATH, t.path)
                 link_data.link = link_path
                 typedefs.append(link_data)
     file_data.typedefs = typedefs
@@ -2146,8 +2125,7 @@ def fill_class_content(tree):
     for classDef in tree.findall(r"compounddef/innerclass[@prot='public']"):
         link_data = LinkData()
         link_data.label = strip_compound_name(classDef.text)
-        # link_data.link = convert_rel_path(classDef.attrib["refid"] + ".html", TEMPLATE_PATH, DOXYGEN_HTML_PATH)
-        link_data.link = HTML_DEST_PATH + classDef.attrib["refid"] + ".html"
+        link_data.link = path_join(HTML_DEST_PATH, classDef.attrib["refid"] + ".html")
         classes.append(link_data)
     file_data.classes = classes
 
@@ -2340,12 +2318,13 @@ def fill_group_content(tree, module_config):
 
     # submodules ---------------------------------------- #
     subgroups = []
-    for subgroup in group_def.subgroups:
-        subgroup_obj = {
-            "label": subgroup.name,
-            "link": subgroup.path
-        }
-        subgroups.append(subgroup_obj)
+    if group_def is not None:
+        for subgroup in group_def.subgroups:
+            subgroup_obj = {
+                "label": subgroup.name,
+                "link": subgroup.path
+            }
+            subgroups.append(subgroup_obj)
     file_data.subgroups = subgroups
 
     # typedefs ------------------------------------------ #
@@ -2357,8 +2336,9 @@ def fill_group_content(tree, module_config):
 
     # ci prefix / description --------------------------- #
     # if the group has a prefix, add it here
-    if group_def.prefix_content is not None:
-        file_data.prefix = group_def.prefix_content
+    if group_def is not None:
+        if group_def.prefix_content is not None:
+            file_data.prefix = group_def.prefix_content
 
     # # enumerations -------------------------------------- #
     # enumerations = []
@@ -2503,7 +2483,7 @@ def process_html_file(in_path, out_path):
     # make sure all links are absolute
     update_links_abs(bs4, TEMPLATE_PATH)
     # now all links shoul be relative to out path
-    update_links(bs4, TEMPLATE_PATH + "guidesContentTemplate.html", in_path, out_path)
+    update_links(bs4, TEMPLATE_PATH, in_path, out_path)
 
     if bs4 is None:
         log("Error generating file, so skipping: " + in_path, 2)
@@ -2703,7 +2683,7 @@ def replace_ci_tag(bs4, link, in_path, out_path):
     ref_obj = find_ci_tag_ref(link)
 
     if ref_obj:
-        ref_location = HTML_DEST_PATH + ref_obj.path
+        ref_location = path_join(HTML_DEST_PATH, ref_obj.path)
         new_link = gen_rel_link_tag(bs4, link.contents, ref_location, in_path, out_path)
 
         # transfer tag classes to new tag
@@ -2736,7 +2716,7 @@ def process_ci_seealso_tag(bs4, tag, out_path):
         label = get_file_name(out_path)
 
     # link_tag = gen_link_tag(bs4, label, out_path)
-    link_data = LinkData(out_path, label)
+    link_data = LinkData(out_path.replace("\\", "/"), label)
 
     # if type(ref_obj) is SymbolMap.Class or type(ref_obj) is SymbolMap.Typedef:
     if type(ref_obj) is SymbolMap.Class:
@@ -2757,23 +2737,28 @@ def process_ci_prefix_tag(bs4, tag, in_path):
     :param in_path: The path to the refix content
     :return:
     """
+    in_path = in_path.replace('\\', '/')
+    in_dir = get_path_dir(in_path)
+
     obj_ref = find_ci_tag_ref(tag)
     if obj_ref and type(obj_ref) is SymbolMap.Class:
 
         # get tag content
         prefix_content = ""
         for c in tag.contents:
-            prefix_content += str(c)
+            content = c.encode("utf-8", errors="replace")
+            prefix_content += content
 
         # generate bs4 from content and update links as reltive from the template path
         # could alternatively set the absolute paths of content, which would then be turned into rel paths later
         new_bs4 = generate_bs4_from_string(prefix_content)
-        update_links(new_bs4, in_path, in_path, TEMPLATE_PATH)
+        update_links(new_bs4, in_dir, in_path, TEMPLATE_PATH)
 
         # get updated body content and assign as prefix_content
         prefix_content = ""
         for c in new_bs4.body:
-            prefix_content += str(c)
+            content = c.encode("utf-8", errors="replace")
+            prefix_content += content
 
         obj_ref.define_prefix(prefix_content)
 
@@ -2846,6 +2831,22 @@ def find_ci_tag_ref(link):
 
 # ======================================================================================================== Link Updating
 
+def path_join(path, link):
+    p = path.replace('\\', '/')
+    l = link.replace('\\', '/')
+    sep = '/' if not p.endswith('/') else ''
+    new_link = p + sep + l
+    return new_link
+
+def get_path_dir(path):
+    path_parts = path.replace('\\', '/').split('/')
+    # if it doesn't end with a '/', lop off the last word
+    if not path.endswith('/'):
+        in_dir = '/'.join(path_parts[:-1]) + '/'
+    else:
+        in_dir = path
+    return in_dir
+
 def update_links_abs(html, src_path):
     """
     Replace all of the relative a links with absolut links
@@ -2900,8 +2901,8 @@ def relative_url(in_path, link):
 
     index = 0
     SEPARATOR = "/"
-    d = in_path.split( SEPARATOR )
-    s = link.split( SEPARATOR )
+    d = filter(None, in_path.replace('\\', SEPARATOR).split( SEPARATOR ))
+    s = filter(None, link.replace('\\', SEPARATOR).split( SEPARATOR ))
 
     # FIND largest substring match
     for i, resource in enumerate( d ):
@@ -2975,7 +2976,7 @@ def update_links(html, template_path, src_path, save_path):
     :return:
     """
 
-    template_path = posixpath.dirname(template_path) + "/"
+    template_path = "/".join(template_path.replace('\\', '/').split('/'))
 
     # css links
     for link in html.find_all("link"):
@@ -3008,12 +3009,14 @@ def update_links(html, template_path, src_path, save_path):
         if iframe.has_attr("src"):
 
             link_src = iframe["src"]
-            if not posixpath.isabs(link_src):
-                link_src = "/" + link_src
+
+            # on osx/unix
+            if os.sep == "/":
+                if not posixpath.isabs(link_src):
+                    link_src = "/" + link_src
             if link_src.startswith('javascript') or link_src.startswith('http'):
                 return
 
-            log(src_path)
             # base dir
             src_base = src_path.split(BASE_PATH)[1].split(os.sep)[0]
             dest_base = save_path.split(BASE_PATH)[1].split(os.sep)[0]
@@ -3060,7 +3063,7 @@ def update_link(link, in_path, out_path):
     # if a relative path, make it absolute
     if in_path.find(base_path) < 0:
         in_path = base_path + in_path
-
+    
     # get absolute in path
     abs_link_path = update_link_abs(link, in_path)
 
@@ -3070,8 +3073,8 @@ def update_link(link, in_path, out_path):
 
     abs_dest = posixpath.dirname(out_path).replace('\\', SEPARATOR)
     abs_link = abs_link_path.replace(src_base, dest_base)
-    if not posixpath.isabs(abs_link):
-        abs_link = "/" + abs_link
+    # if not posixpath.isabs(abs_link):
+        # abs_link = "/" + abs_link
 
     rel_link_path = relative_url(abs_dest, abs_link)
 
@@ -3678,7 +3681,10 @@ def load_meta():
             file_meta["cinder_version"] = ver
 
     # get docs directory
-    file_meta["docs_root"] = HTML_DEST_PATH
+    file_meta["docs_root"] = args.root
+
+    # include google analytics
+    file_meta["include_analytics"] = args.include_analytics
 
 
 def log(message, level=0, force=False):
@@ -3724,12 +3730,12 @@ if __name__ == "__main__":
     if args.path:
         inPath = args.path
         if not os.path.isfile(inPath) and not os.path.isdir(inPath):
-            log("Nice try! Directory or file '" + inPath + "' doesn't even exist, so we're going to stop right... now!")
+            log("Nice try! Directory or file '" + inPath + "' doesn't even exist, so we're going to stop right... now!", True)
             quit()
 
     if not os.path.exists(TAG_FILE_PATH):
-        log("I got nothin for you. The tag file [" + TAG_FILE_PATH + "] doesn't exist yet. "
-            "Run doxygen first and try me again later.", 2)
+        log("I got nothin' for you. The tag file [" + TAG_FILE_PATH + "] doesn't exist yet. "
+            "Run Doxygen first and try me again later.", 2, True)
         quit()
 
     # load meta data
@@ -3763,7 +3769,6 @@ if __name__ == "__main__":
             process_file(inPath, args.outpath if len(sys.argv) > 2 else None)
             log("SUCCESSFULLY GENERATED YOUR FILE!", 0, True)
         elif os.path.isdir(inPath):
-            # print isdir
             if inPath == "htmlsrc" + os.sep:
                 process_html_dir(HTML_SOURCE_PATH)
             else:
@@ -3771,3 +3776,4 @@ if __name__ == "__main__":
             log("SUCCESSFULLY GENERATED YOUR FILES!", 0, True)
     else:
         log("Unknown usage", 1, True)
+

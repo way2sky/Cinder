@@ -36,13 +36,17 @@ namespace cinder { namespace gl {
 
 namespace cinder { namespace app {
 
+#if defined( CINDER_MSW_DESKTOP )
+class WindowImplMsw;
+#endif
+
 class RendererImplGlAngle : public RendererImplMsw {
  public:
 	RendererImplGlAngle( class RendererGl *renderer );
 
-#if defined( CINDER_MSW )	
-	bool	initialize( HWND wnd, HDC dc, RendererRef sharedRenderer ) override;
-#elif defined( CINDER_WINRT )
+#if defined( CINDER_MSW_DESKTOP )	
+	bool	initialize( WindowImplMsw *windowImpl, RendererRef sharedRenderer );
+#elif defined( CINDER_UWP )
 	bool	initialize( ::Platform::Agile<Windows::UI::Core::CoreWindow> wnd, RendererRef sharedRenderer ) override;
 #endif
 	void	prepareToggleFullScreen() override;
@@ -52,9 +56,6 @@ class RendererImplGlAngle : public RendererImplMsw {
 	void	swapBuffers() const override;
 	void	makeCurrentContext( bool force = false ) override;
 
-#if defined( CINDER_MSW )
-	HDC		getDc() const { return mDc; }
-#endif
  protected:
 	int		initMultisample( PIXELFORMATDESCRIPTOR pfd, int requestedLevelIdx, HDC dc );
 	
@@ -64,8 +65,8 @@ class RendererImplGlAngle : public RendererImplMsw {
 	EGLContext		mContext;
 	EGLDisplay		mDisplay;
 	EGLSurface		mSurface;
-#if defined( CINDER_MSW )
-	HDC				mDc;
+#if defined( CINDER_MSW_DESKTOP )
+	WindowImplMsw	*mWindowImpl;
 #endif
 };
 

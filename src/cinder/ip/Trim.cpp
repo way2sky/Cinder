@@ -21,8 +21,6 @@
 */
 
 #include "cinder/ip/Trim.h"
-
-#include <boost/preprocessor/seq.hpp>
 #include <algorithm>
 
 namespace cinder { namespace ip {
@@ -43,7 +41,7 @@ template<typename T>
 bool transparentVerticalScanline( const SurfaceT<T> &surface, int32_t column, int32_t y1, int32_t y2 )
 {
 	const T *dstPtr = surface.getDataAlpha( ivec2( column, y1 ) );
-	int32_t rowBytes = surface.getRowBytes();
+	ptrdiff_t rowBytes = surface.getRowBytes();
 	for( int32_t y = y1; y < y2; ++y ) {
 		if( *dstPtr ) return false;
 		dstPtr += rowBytes;
@@ -80,7 +78,7 @@ Area findNonTransparentArea( const SurfaceT<T> &surface, const Area &unclippedBo
 			break;
 		}
 	}
-	for( rightColumn = bounds.getX2(); rightColumn > leftColumn; --rightColumn ) {
+	for( rightColumn = bounds.getX2() - 1; rightColumn > leftColumn; --rightColumn ) {
 		if( ! transparentVerticalScanline( surface, rightColumn, topLine, bottomLine ) ) {
 			break;
 		}
@@ -92,9 +90,11 @@ Area findNonTransparentArea( const SurfaceT<T> &surface, const Area &unclippedBo
 	return Area( leftColumn, topLine, rightColumn, bottomLine );
 }
 
-#define TRIM_PROTOTYPES(r,data,T)\
-	template Area findNonTransparentArea( const SurfaceT<T> &surface, const Area &unclippedBounds );
+#define TRIM_PROTOTYPES(T)\
+	template CI_API Area findNonTransparentArea( const SurfaceT<T> &surface, const Area &unclippedBounds );
 
-BOOST_PP_SEQ_FOR_EACH( TRIM_PROTOTYPES, ~, CHANNEL_TYPES )
+// These should match CHANNEL_TYPES
+TRIM_PROTOTYPES(uint8_t)
+TRIM_PROTOTYPES(float)
 
 } } // namespace cinder::ip

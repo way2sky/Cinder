@@ -22,15 +22,15 @@
 
 #pragma once
 
-#if ! defined( CINDER_GL_ES_2 )
-
 #include "cinder/gl/BufferObj.h"
+
+#if ! defined( CINDER_GL_ES_2 )
 
 namespace cinder { namespace gl {
 	
 typedef std::shared_ptr<class Ubo> UboRef;
 
-class Ubo : public BufferObj 
+class CI_API Ubo : public BufferObj 
 {
   public:
 	static UboRef	create();

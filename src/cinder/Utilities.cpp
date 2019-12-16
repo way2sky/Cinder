@@ -32,8 +32,8 @@
 #endif
 
 #include <vector>
-#include <boost/tokenizer.hpp>
-#include <boost/algorithm/string.hpp>
+#include <fstream>
+#include <cctype>
 
 using std::vector;
 using std::string;
@@ -73,20 +73,87 @@ std::vector<std::string> split( const std::string &str, char separator, bool com
 
 std::vector<std::string> split( const std::string &str, const std::string &separators, bool compress )
 {
-	vector<string> result;
-
-	boost::algorithm::split( result, str, boost::is_any_of(separators), 
-		compress ? boost::token_compress_on : boost::token_compress_off );
-
+	std::vector<std::string> result;
+	
+	std::size_t searchPrevPos = 0, searchPos;
+	while( (searchPos = str.find_first_of( separators, searchPrevPos )) != std::string::npos ) {
+		if( searchPos >= searchPrevPos && ! compress ) {
+			result.push_back( str.substr( searchPrevPos, searchPos - searchPrevPos ) );
+		}
+		else if( searchPos > searchPrevPos ) {
+			result.push_back( str.substr( searchPrevPos, searchPos - searchPrevPos ) );
+		}
+		
+		searchPrevPos = searchPos + 1;
+	}
+	
+	if( searchPrevPos <= str.length() )
+		result.push_back( str.substr( searchPrevPos, std::string::npos ) );
+	
 	return result;
 }
 
 string loadString( const DataSourceRef &dataSource )
 {
-	Buffer buffer( dataSource );
-	const char *data = static_cast<const char *>( buffer.getData() );
+	auto buffer = dataSource->getBuffer();
+	const char *data = static_cast<const char *>( buffer->getData() );
 
-	return string( data, data + buffer.getSize() );
+	return string( data, data + buffer->getSize() );
+}
+
+void writeString( const fs::path &path, const std::string &str )
+{
+	writeString( (DataTargetRef)writeFile( path ), str );
+}
+
+void writeString( const DataTargetRef &dataTarget, const std::string &str )
+{
+	fs::path outPath = dataTarget->getFilePath();
+	if( outPath.empty() ) {
+		throw ci::Exception( "writeString can only write to file." );
+	}
+
+	std::ofstream ofs( outPath.string(), std::ofstream::binary );
+	ofs << str;
+	ofs.close();
+}
+
+bool asciiCaseEqual( const std::string &a, const std::string &b )
+{
+	if( a.size() != b.size() )
+		return false;
+	else
+		return equal( a.cbegin(), a.cend(), b.cbegin(), []( std::string::value_type ac, std::string::value_type bc ) {
+				return std::toupper(ac) == std::toupper(bc);
+		});
+}
+
+bool asciiCaseEqual( const char *a, const char *b )
+{
+	bool result;
+	while( (result = std::toupper(*a) == std::toupper(*b++)) == true )
+		if( *a++ == '\0' )
+			break;
+
+	return result;
+}
+
+int asciiCaseCmp( const char *a, const char *b )
+{
+	while( ((int)std::toupper(*a)) == ((int)std::toupper(*b)) ) {
+		if( *a == '\0' || *b == '\0' )
+			break;
+		++a, ++b;
+	}
+
+	return ((int)std::toupper(*a)) - ((int)std::toupper(*b));
+}
+
+std::string trim( const std::string &str )
+{
+	size_t wsFront = str.find_first_not_of( " \f\n\r\t\v" );
+	size_t wsBack = str.find_last_not_of( " \f\n\r\t\v" );
+	return wsBack <= wsFront ? std::string() : str.substr( wsFront, wsBack - wsFront + 1 );
 }
 
 void sleep( float milliseconds )
@@ -99,39 +166,67 @@ vector<string> stackTrace()
 	return app::Platform::get()->stackTrace();
 }
 
-int16_t swapEndian( int16_t val ) { 
-	return (int16_t) (	(((uint16_t) (val) & (uint16_t) 0x00ffU) << 8) | 
+void setThreadName( const std::string &name )
+{
+	app::Platform::get()->setThreadName( name );
+}
+
+int16_t swapEndian( int16_t val )
+{
+	return (int16_t) (	(((uint16_t) (val) & (uint16_t) 0x00ffU) << 8) |
 						(((uint16_t) (val) & (uint16_t) 0xff00U) >> 8) );
 }
 
-uint16_t swapEndian( uint16_t val ) { 
-	return (uint16_t) (	(((uint16_t) (val) & (uint16_t) 0x00ffU) << 8) | 
+uint16_t swapEndian( uint16_t val )
+{
+	return (uint16_t) (	(((uint16_t) (val) & (uint16_t) 0x00ffU) << 8) |
 						(((uint16_t) (val) & (uint16_t) 0xff00U) >> 8) );
 }
 
-int32_t swapEndian( int32_t val ) { 
+int32_t swapEndian( int32_t val )
+{
 	return (int32_t)((((uint32_t) (val) & (uint32_t) 0x000000FFU) << 24) |
 					 (((uint32_t) (val) & (uint32_t) 0x0000FF00U) <<  8) |
 					 (((uint32_t) (val) & (uint32_t) 0x00FF0000U) >>  8) |
 					 (((uint32_t) (val) & (uint32_t) 0xFF000000U) >> 24));
 }
 
-uint32_t swapEndian( uint32_t val ) { 
+uint32_t swapEndian( uint32_t val )
+{
 	return (uint32_t)((((uint32_t) (val) & (uint32_t) 0x000000FFU) << 24) |
 					 (((uint32_t) (val) & (uint32_t) 0x0000FF00U) <<  8) |
 					 (((uint32_t) (val) & (uint32_t) 0x00FF0000U) >>  8) |
 					 (((uint32_t) (val) & (uint32_t) 0xFF000000U) >> 24));
 }
 
-float swapEndian( float val ) { 
+int64_t swapEndian( int64_t val )
+{
+	uint64_t	x = reinterpret_cast<uint64_t&>( val );
+				x = (x & 0x00000000FFFFFFFF) << 32 | (x & 0xFFFFFFFF00000000) >> 32;
+				x = (x & 0x0000FFFF0000FFFF) << 16 | (x & 0xFFFF0000FFFF0000) >> 16;
+				x = (x & 0x00FF00FF00FF00FF) << 8  | (x & 0xFF00FF00FF00FF00) >> 8;
+	return reinterpret_cast<int64_t&>( x );
+}
+
+uint64_t swapEndian( uint64_t val )
+{
+	uint64_t	x = (val & 0x00000000FFFFFFFF) << 32 | (val & 0xFFFFFFFF00000000) >> 32;
+				x = (x & 0x0000FFFF0000FFFF) << 16 | (x & 0xFFFF0000FFFF0000) >> 16;
+				x = (x & 0x00FF00FF00FF00FF) << 8  | (x & 0xFF00FF00FF00FF00) >> 8;
+	return x;
+}
+
+float swapEndian( float val )
+{
 	uint32_t temp = swapEndian( * reinterpret_cast<uint32_t*>( &val ) );
 	return *(reinterpret_cast<float*>( &temp ) );
 }
 
-double swapEndian( double val ) {
+double swapEndian( double val )
+{
 	union {
 		double d;
-		struct {  
+		struct {
 			uint32_t a;
 			uint32_t b;
 		} i;

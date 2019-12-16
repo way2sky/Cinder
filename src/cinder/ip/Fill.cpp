@@ -22,8 +22,6 @@
 
 #include "cinder/ip/Fill.h"
 
-#include <boost/preprocessor/seq.hpp>
-
 namespace cinder { namespace ip {
 
 template<typename T>
@@ -31,7 +29,7 @@ void fill_impl( SurfaceT<T> *surface, const ColorT<T> &color, const Area &area )
 {
 	const Area clippedArea = area.getClipBy( surface->getBounds() );
 
-	int32_t rowBytes = surface->getRowBytes();
+	ptrdiff_t rowBytes = surface->getRowBytes();
 	uint8_t pixelInc = surface->getPixelInc();
 	const T red = color.r, green = color.g, blue = color.b;
 	uint8_t redOffset = surface->getRedOffset(), greenOffset = surface->getGreenOffset(), blueOffset = surface->getBlueOffset();
@@ -57,7 +55,7 @@ void fill_impl( SurfaceT<T> *surface, const ColorAT<T> &color, const Area &area 
 	
 	const Area clippedArea = area.getClipBy( surface->getBounds() );
 
-	int32_t rowBytes = surface->getRowBytes();
+	ptrdiff_t rowBytes = surface->getRowBytes();
 	uint8_t pixelInc = surface->getPixelInc();
 	const T red = color.r, green = color.g, blue = color.b, alpha = color.a;
 	uint8_t redOffset = surface->getRedOffset(), greenOffset = surface->getGreenOffset(), blueOffset = surface->getBlueOffset(), alphaOffset = surface->getAlphaOffset();
@@ -106,7 +104,7 @@ void fill( ChannelT<T> *channel, T value, const Area &area )
 {
 	const Area clippedArea = area.getClipBy( channel->getBounds() );
 	
-	int32_t rowBytes = channel->getRowBytes();
+	ptrdiff_t rowBytes = channel->getRowBytes();
 	uint8_t inc = channel->getIncrement();
 	for( int32_t y = clippedArea.getY1(); y < clippedArea.getY2(); ++y ) {
 		T *dstPtr = reinterpret_cast<T*>( reinterpret_cast<uint8_t*>( channel->getData() + clippedArea.getX1() * inc ) + y * rowBytes );
@@ -123,23 +121,24 @@ void fill( ChannelT<T> *channel, T value )
 	fill( channel, value, channel->getBounds() );
 }
 
-#define fill_PROTOTYPES(r,data,T)\
-	template void fill<T,uint8_t>( SurfaceT<T> *surface, const ColorT<uint8_t> &color, const Area &area ); \
-	template void fill<T,uint8_t>( SurfaceT<T> *surface, const ColorT<uint8_t> &color ); \
-	template void fill<T,uint8_t>( SurfaceT<T> *surface, const ColorAT<uint8_t> &color, const Area &area ); \
-	template void fill<T,uint8_t>( SurfaceT<T> *surface, const ColorAT<uint8_t> &color ); \
-	template void fill<T,uint16_t>( SurfaceT<T> *surface, const ColorT<uint16_t> &color, const Area &area ); \
-	template void fill<T,uint16_t>( SurfaceT<T> *surface, const ColorT<uint16_t> &color ); \
-	template void fill<T,uint16_t>( SurfaceT<T> *surface, const ColorAT<uint16_t> &color, const Area &area ); \
-	template void fill<T,uint16_t>( SurfaceT<T> *surface, const ColorAT<uint16_t> &color ); \
-	template void fill<T,float>( SurfaceT<T> *surface, const ColorT<float> &color, const Area &area ); \
-	template void fill<T,float>( SurfaceT<T> *surface, const ColorT<float> &color ); \
-	template void fill<T,float>( SurfaceT<T> *surface, const ColorAT<float> &color, const Area &area ); \
-	template void fill<T,float>( SurfaceT<T> *surface, const ColorAT<float> &color ); \
-	template void fill<T>( ChannelT<T> *channel, const T value, const Area &area ); \
-	template void fill<T>( ChannelT<T> *channel, const T value );
+#define fill_PROTOTYPES(T)\
+	template CI_API void fill<T,uint8_t>( SurfaceT<T> *surface, const ColorT<uint8_t> &color, const Area &area ); \
+	template CI_API void fill<T,uint8_t>( SurfaceT<T> *surface, const ColorT<uint8_t> &color ); \
+	template CI_API void fill<T,uint8_t>( SurfaceT<T> *surface, const ColorAT<uint8_t> &color, const Area &area ); \
+	template CI_API void fill<T,uint8_t>( SurfaceT<T> *surface, const ColorAT<uint8_t> &color ); \
+	template CI_API void fill<T,uint16_t>( SurfaceT<T> *surface, const ColorT<uint16_t> &color, const Area &area ); \
+	template CI_API void fill<T,uint16_t>( SurfaceT<T> *surface, const ColorT<uint16_t> &color ); \
+	template CI_API void fill<T,uint16_t>( SurfaceT<T> *surface, const ColorAT<uint16_t> &color, const Area &area ); \
+	template CI_API void fill<T,uint16_t>( SurfaceT<T> *surface, const ColorAT<uint16_t> &color ); \
+	template CI_API void fill<T,float>( SurfaceT<T> *surface, const ColorT<float> &color, const Area &area ); \
+	template CI_API void fill<T,float>( SurfaceT<T> *surface, const ColorT<float> &color ); \
+	template CI_API void fill<T,float>( SurfaceT<T> *surface, const ColorAT<float> &color, const Area &area ); \
+	template CI_API void fill<T,float>( SurfaceT<T> *surface, const ColorAT<float> &color ); \
+	template CI_API void fill<T>( ChannelT<T> *channel, const T value, const Area &area ); \
+	template CI_API void fill<T>( ChannelT<T> *channel, const T value );
 
-BOOST_PP_SEQ_FOR_EACH( fill_PROTOTYPES, ~, (uint8_t)(uint16_t)(float) )
-
+fill_PROTOTYPES(uint8_t)
+fill_PROTOTYPES(uint16_t)
+fill_PROTOTYPES(float)
 
 } } // namespace cinder::ip

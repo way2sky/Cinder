@@ -30,7 +30,7 @@
 #include <iostream>
 #include <fcntl.h>
 
-#if defined( CINDER_MAC )
+#if defined( CINDER_MAC ) || defined( CINDER_LINUX )
 	#include <termios.h>
 	#include <sys/ioctl.h>
 	#include <getopt.h>
@@ -73,7 +73,7 @@ Serial::~Serial()
 
 Serial::Impl::Impl( const Serial::Device &device, int baudRate )
 {
-#if defined( CINDER_MAC )
+#if defined( CINDER_MAC ) || defined( CINDER_LINUX )
 	mFd = open( ( "/dev/" + device.getName() ).c_str(), O_RDWR | O_NOCTTY | O_NONBLOCK );
 	if( mFd == -1 ) {
 		throw SerialExcOpenFailed();
@@ -89,7 +89,9 @@ Serial::Impl::Impl( const Serial::Device &device, int baudRate )
 	baudToConstant[4800] = B4800;
 	baudToConstant[9600] = B9600;			
 	baudToConstant[19200] = B19200;
+#if !defined( CINDER_LINUX )
 	baudToConstant[28800] = B28800;
+#endif
 	baudToConstant[38400] = B38400;
 	baudToConstant[57600] = B57600;
 	baudToConstant[115200] = B115200;
@@ -118,7 +120,7 @@ Serial::Impl::Impl( const Serial::Device &device, int baudRate )
 	::DWORD configSize = sizeof( ::COMMCONFIG );
 	::GetCommConfig( mDeviceHandle, &config, &configSize );
 	
-	string settingsStr = string("baud=") + toString( baudRate ) + " parity=N data=8 stop=1";
+	string settingsStr = "baud=" + toString( baudRate ) + " parity=N data=8 stop=1";
 	if( ! ::BuildCommDCBA( settingsStr.c_str(), &config.dcb ) ) {
 		throw SerialExcOpenFailed();	
 	}	
@@ -139,7 +141,7 @@ Serial::Impl::Impl( const Serial::Device &device, int baudRate )
 
 Serial::Impl::~Impl()
 {
-#if defined( CINDER_MAC )
+#if defined( CINDER_MAC ) || defined( CINDER_LINUX )
 	// restore the termios from before we opened the port
 	::tcsetattr( mFd, TCSANOW, &mSavedOptions );
 	::close( mFd );
@@ -151,23 +153,21 @@ Serial::Impl::~Impl()
 
 Serial::Device Serial::findDeviceByName( const std::string &name, bool forceRefresh )
 {
-	const std::vector<Serial::Device> &devices = getDevices( forceRefresh );
-	for( std::vector<Serial::Device>::const_iterator deviceIt = devices.begin(); deviceIt != devices.end(); ++deviceIt ) {
-		if( deviceIt->getName() == name )
-			return *deviceIt;
+	for( const auto& device : getDevices( forceRefresh ) ) {
+		if ( device.getName() == name )
+			return device;
 	}
-	
+
 	return Serial::Device();
 }
 
 Serial::Device Serial::findDeviceByNameContains( const std::string &searchString, bool forceRefresh )
 {
-	const std::vector<Serial::Device> &devices = getDevices( forceRefresh );
-	for( std::vector<Serial::Device>::const_iterator deviceIt = devices.begin(); deviceIt != devices.end(); ++deviceIt ) {
-		if( deviceIt->getName().find( searchString ) != std::string::npos )
-			return *deviceIt;
+	for( const auto& device : getDevices( forceRefresh ) ) {
+		if( device.getName().find( searchString ) != std::string::npos )
+			return device;
 	}
-	
+
 	return Serial::Device();
 }
 	
@@ -178,7 +178,7 @@ const std::vector<Serial::Device>& Serial::getDevices( bool forceRefresh )
 
 	sDevices.clear();
 
-#if defined( CINDER_MAC )	
+#if defined( CINDER_MAC ) || defined( CINDER_LINUX )
 	::DIR *dir;
 	::dirent *entry;
 	dir = ::opendir( "/dev" );
@@ -189,7 +189,11 @@ const std::vector<Serial::Device>& Serial::getDevices( bool forceRefresh )
 	else {
 		while( ( entry = ::readdir( dir ) ) != NULL ) {
 			std::string str( (char *)entry->d_name );
+#if defined( CINDER_MAC )
 			if( ( str.substr( 0, 4 ) == "tty." ) || ( str.substr( 0, 3 ) == "cu." ) ) {
+#else
+			if( ( str.substr( 0, 3 ) == "tty" ) ) {
+#endif
 				sDevices.push_back( Serial::Device( str ) );
 			}
 		}
@@ -250,13 +254,13 @@ void Serial::writeBytes( const void *data, size_t numBytes )
 	size_t totalBytesWritten = 0;
 	
 	while( totalBytesWritten < numBytes ) {
-#if defined( CINDER_MAC )
+#if defined( CINDER_MAC ) || defined( CINDER_LINUX )
 		long bytesWritten = ::write( mImpl->mFd, data, numBytes - totalBytesWritten );
 		if( ( bytesWritten == -1 ) && ( errno != EAGAIN ) )
-			throw SerialExcReadFailure();	
+			throw SerialExcWriteFailure();
 #elif defined( CINDER_MSW )
 		::DWORD bytesWritten;
-		if( ! ::WriteFile( mImpl->mDeviceHandle, data, numBytes - totalBytesWritten, &bytesWritten, 0 ) )
+		if( ! ::WriteFile( mImpl->mDeviceHandle, data, static_cast<DWORD>( numBytes - totalBytesWritten ), &bytesWritten, 0 ) )
 			throw SerialExcWriteFailure();
 #endif
 		if( bytesWritten != -1 )
@@ -268,13 +272,13 @@ void Serial::readBytes( void *data, size_t numBytes )
 {
 	size_t totalBytesRead = 0;
 	while( totalBytesRead < numBytes ) {
-#if defined( CINDER_MAC )
+#if defined( CINDER_MAC ) || defined( CINDER_LINUX )
 		long bytesRead = ::read( mImpl->mFd, data, numBytes - totalBytesRead );
 		if( ( bytesRead == -1 ) && ( errno != EAGAIN ) )
 			throw SerialExcReadFailure();
 #elif defined( CINDER_MSW )
 		::DWORD bytesRead = 0;
-		if( ! ::ReadFile( mImpl->mDeviceHandle, data, numBytes - totalBytesRead, &bytesRead, 0 ) )
+		if( ! ::ReadFile( mImpl->mDeviceHandle, data, static_cast<DWORD>( numBytes - totalBytesRead ), &bytesRead, 0 ) )
 			throw SerialExcReadFailure();
 #endif
 		if( bytesRead != -1 )
@@ -287,11 +291,11 @@ void Serial::readBytes( void *data, size_t numBytes )
 
 size_t Serial::readAvailableBytes( void *data, size_t maximumBytes )
 {
-#if defined( CINDER_MAC )
+#if defined( CINDER_MAC ) || defined( CINDER_LINUX )
 	long bytesRead = ::read( mImpl->mFd, data, maximumBytes );
 #elif defined( CINDER_MSW )
 	::DWORD bytesRead = 0;
-	if( ! ::ReadFile( mImpl->mDeviceHandle, data, maximumBytes, &bytesRead, 0 ) )
+	if( ! ::ReadFile( mImpl->mDeviceHandle, data, static_cast<DWORD>( maximumBytes ), &bytesRead, 0 ) )
 		throw SerialExcReadFailure();
 #endif
 
@@ -315,60 +319,46 @@ uint8_t Serial::readByte()
 
 std::string Serial::readStringUntil( char token, size_t maxLength, double timeoutSeconds )
 {
-	size_t bufferSize = 1024, bufferOffset = 0;
-	shared_ptr<char> buffer( (char*)malloc( bufferSize ), free );
+	std::string buffer;
+	buffer.reserve( 1024 );
 
 	bool useMaxLength = maxLength > 0;
 	bool useTimer = timeoutSeconds > 0;
-	Timer timer;
-	if( useTimer )
-		timer.start();
+	Timer timer( useTimer );
 
 	bool done = false;
 	while( ! done ) {
 		char v = readChar();
-		buffer.get()[bufferOffset++] = v;
+		buffer.push_back( v );
 		if( v == token ) {
 			done = true;
 		}
-		else if( useMaxLength && ( bufferOffset == maxLength ) ) {
+		else if( useMaxLength && ( buffer.size() >= maxLength ) ) {
 			done = true;
 		}
-		else if( useTimer && ( timer.getSeconds() > timeoutSeconds ) )
+		else if( useTimer && ( timer.getSeconds() > timeoutSeconds ) ) {
 			throw SerialTimeoutExc();
-
-		// we need to reallocate even if this happens to be the last byte, because we need room for a null-terminator
-		if( bufferOffset == bufferSize ) {
-			char *newBuffer = (char*)malloc( bufferSize * 2 );
-			memcpy( newBuffer, buffer.get(), bufferSize );
-			bufferSize *= 2;
-			buffer = shared_ptr<char>( newBuffer, free );
 		}
 	}
-
-	buffer.get()[bufferOffset] = 0; // need to null terminate this thing
-	std::string result( buffer.get() );
-
-	return result;
+	return buffer;
 }
 
 void Serial::writeString( const std::string &str )
 {
-	for( string::const_iterator strIt = str.begin(); strIt != str.end(); ++strIt )
-		writeByte( *strIt );
+	writeBytes( str.data(), str.size() );
 }
 
 size_t Serial::getNumBytesAvailable() const
 {
 	int result;
 	
-#if defined( CINDER_MAC )
+#if defined( CINDER_MAC ) || defined( CINDER_LINUX )
 	::ioctl( mImpl->mFd, FIONREAD, &result );
 #elif defined( CINDER_MSW )
 	::COMSTAT status;
 	::DWORD error;
 	if( ! ::ClearCommError( mImpl->mDeviceHandle, &error, &status ) )
-		throw SerialExc( "Serial failuture upon attempt to retreive information on device handle" );
+		throw SerialExc( "Serial failure upon attempt to retrieve information on device handle" );
 	else
 		result = status.cbInQue;
 #endif
@@ -378,7 +368,7 @@ size_t Serial::getNumBytesAvailable() const
 	
 void Serial::flush( bool input, bool output )
 {
-#if defined( CINDER_MAC )
+#if defined( CINDER_MAC ) || defined( CINDER_LINUX )
 	int queue;
 	if( input && output )
 		queue = TCIOFLUSH;

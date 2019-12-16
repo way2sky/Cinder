@@ -44,7 +44,7 @@ namespace params {
 typedef std::shared_ptr<class InterfaceGl>	InterfaceGlRef;
 
 //! Interface for adding params to your window.  Wraps AntTweakBar.
-class InterfaceGl {
+class CI_API InterfaceGl {
   public:
 	//! Creates and returns an InterfaceGl referenced by \a title and with \a size dimensions. Optionally takes \a color.
 	static InterfaceGlRef create( const std::string &title, const ivec2 &size, const ColorA &color = ColorA( 0.3f, 0.3f, 0.3f, 0.4f ) );
@@ -59,12 +59,14 @@ class InterfaceGl {
 	InterfaceGl( const cinder::app::WindowRef &window, const std::string &title, const ivec2 &size, const ColorA &color = ColorA( 0.3f, 0.3f, 0.3f, 0.4f ) );
 
 	//! Base class for chainable options. \see Options<T>.
-	class OptionsBase {
+	class CI_API OptionsBase {
 	  public:
 		const std::string&	getName() const				{ return mName; }
 		void*				getVoidPtr() const			{ return mVoidPtr; }
 		const std::string&	getKeyIncr() const			{ return mKeyIncr; }
 		const std::string&	getKeyDecr() const			{ return mKeyDecr; }
+
+		void				setVisible( bool visible = true );
 
 	  protected:
 		OptionsBase( const std::string &name, void *targetVoidPtr, InterfaceGl *parent );
@@ -76,12 +78,13 @@ class InterfaceGl {
 		void setKeyIncr( const std::string &keyIncr );
 		void setKeyDecr( const std::string &keyDecr );
 		void setKey( const std::string &key );
+		void setLabel( const std::string &label );
 		void setGroup( const std::string &group );
 		void setOptionsStr( const std::string &optionsStr );
 
 		void reAddOptions();
 
-		std::string mName, mKeyIncr, mKeyDecr, mKey, mGroup, mOptionsStr;
+		std::string mName, mKeyIncr, mKeyDecr, mKey, mLabel, mGroup, mOptionsStr;
 		void*		mVoidPtr;
 		float		mMin, mMax, mStep;
 		int			mPrecision;
@@ -94,7 +97,7 @@ class InterfaceGl {
 
 	//! Provides chainable options, returned from addParam().
 	template <typename T>
-	class Options : public OptionsBase {
+	class CI_API Options : public OptionsBase {
   	  public:
 		Options( const std::string &name, T *target, int type, InterfaceGl *parent );
 
@@ -116,6 +119,8 @@ class InterfaceGl {
 		Options&	keyDecr( const std::string &keyDecr )		{ setKeyDecr( keyDecr ); return *this; }
 		//! Sets a shortcut key for param types that cannot be incremented / decremented (ex. bool)
 		Options&	key( const std::string &key )				{ setKey( key ); return *this; }
+		//! Sets the param label. A parameter name must be unique, but you can override it with a 'label', which does not have to be unique.
+		Options&	label( const std::string &label )			{ setLabel( label ); return *this; }
 		//! Sets the param group
 		Options&	group( const std::string &group )			{ setGroup( group ); return *this; }
 		//! Sets other implementation defined options via string.
@@ -125,6 +130,9 @@ class InterfaceGl {
 		Options&	accessors( const SetterFn &setterFn, const GetterFn &getterFn );
 		//!! Sets an update function that will be called after the target param is updated.
 		Options&	updateFn( const UpdateFn &updateFn );
+
+		//! Shows or hides this param.
+		Options&	visible( bool visible = true ) { setVisible( visible ); return *this; }
 
 	  private:
 		T*				mTarget;
@@ -148,8 +156,18 @@ class InterfaceGl {
 	void	minimize();
 	//! Returns whether the interface is maximized or not. \see maximize(), minimize()
 	bool	isMaximized() const;
+	//! Gets the position of this interface instance
+	ivec2	getPosition() const;
 	//! Sets the position of this interface instance
 	void	setPosition( const ci::ivec2 &pos );
+	//! Gets the width of this interface instance
+	int		getWidth() const { return getSize().x; }
+	//! Gets the height of this interface instance
+	int		getHeight() const { return getSize().y; }
+	//! Gets the size of this interface instance
+	ivec2	getSize() const;
+	//! Sets the size of this interface instance
+	void	setSize( const ci::ivec2 &size );
 	//! Adds \a target as a param to the interface, referring to it with \a name. \return Options<T> for chaining options to the param.
 	template <typename T>
 	Options<T>	addParam( const std::string &name, T *target, bool readOnly = false );

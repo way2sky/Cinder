@@ -23,12 +23,13 @@
 
 #include "cinder/audio/Target.h"
 #include "cinder/CinderAssert.h"
+#include "cinder/audio/FileOggVorbis.h"
 
 #include "cinder/Utilities.h"
 
 #if defined( CINDER_COCOA )
 	#include "cinder/audio/cocoa/FileCoreAudio.h"
-#elif defined( CINDER_MSW ) || defined( CINDER_WINRT )
+#elif defined( CINDER_MSW )
 	#include "cinder/audio/msw/FileMediaFoundation.h"
 #endif
 
@@ -38,25 +39,35 @@ namespace cinder { namespace audio {
 
 // TODO: these should be replaced with a generic registrar derived from the ImageIo stuff.
 
-std::unique_ptr<TargetFile> TargetFile::create( const DataTargetRef &dataTarget, size_t sampleRate, size_t numChannels, SampleType sampleType, const std::string &extension )
+std::unique_ptr<TargetFile> TargetFile::create( const DataTargetRef &dataTarget, size_t sampleRate, size_t numChannels, SampleType sampleType, std::string ext )
 {
-#if ! defined( CINDER_WINRT ) || ( _MSC_VER > 1800 )
-	std::string ext = dataTarget->getFilePathHint().extension().string();
+	if( ext.empty() ) {
+#if ! defined( CINDER_UWP ) || ( _MSC_VER > 1800 )
+		ext = dataTarget->getFilePathHint().extension().string();
 #else
-	std::string ext = dataTarget->getFilePathHint().extension();
+		ext = dataTarget->getFilePathHint().extension();
 #endif
-	ext = ( ( ! ext.empty() ) && ( ext[0] == '.' ) ) ? ext.substr( 1, string::npos ) : ext;
+		if ( ! ext.empty() && ( ext[0] == '.' ) ) {
+			ext.erase( ext.begin() );
+		}
+	}
+
+	if( ext == "ogg" ) {
+		return std::unique_ptr<TargetFile>( new TargetFileOggVorbis( dataTarget, sampleRate, numChannels, sampleType ) );
+	}
 
 #if defined( CINDER_COCOA )
 	return std::unique_ptr<TargetFile>( new cocoa::TargetFileCoreAudio( dataTarget, sampleRate, numChannels, sampleType, ext ) );
-#elif defined( CINDER_MSW ) || defined( CINDER_WINRT )
+#elif defined( CINDER_MSW )
 	return std::unique_ptr<TargetFile>( new msw::TargetFileMediaFoundation( dataTarget, sampleRate, numChannels, sampleType, ext ) );
+#else
+	return nullptr;
 #endif
 }
 
-std::unique_ptr<TargetFile> TargetFile::create( const fs::path &path, size_t sampleRate, size_t numChannels, SampleType sampleType, const std::string &extension )
+std::unique_ptr<TargetFile> TargetFile::create( const fs::path &path, size_t sampleRate, size_t numChannels, SampleType sampleType, std::string extension )
 {
-	return create( (DataTargetRef)writeFile( path ), sampleRate, numChannels, sampleType, extension );
+	return create( writeFile( path ), sampleRate, numChannels, sampleType, extension );
 }
 
 void TargetFile::write( const Buffer *buffer )
@@ -66,6 +77,9 @@ void TargetFile::write( const Buffer *buffer )
 
 void TargetFile::write( const Buffer *buffer, size_t numFrames )
 {
+	if( ! numFrames )
+		return;
+
 	CI_ASSERT_MSG( numFrames <= buffer->getNumFrames(), "numFrames out of bounds" );
 
 	performWrite( buffer, numFrames, 0 );
@@ -73,6 +87,9 @@ void TargetFile::write( const Buffer *buffer, size_t numFrames )
 
 void TargetFile::write( const Buffer *buffer, size_t numFrames, size_t frameOffset )
 {
+	if( ! numFrames )
+		return;
+
 	CI_ASSERT_MSG( numFrames + frameOffset <= buffer->getNumFrames(), "numFrames + frameOffset out of bounds" );
 
 	performWrite( buffer, numFrames, frameOffset );

@@ -26,7 +26,6 @@
 
 #include "cinder/Xml.h"
 #include "cinder/Utilities.h"
-#include <boost/algorithm/string.hpp>
 
 #include "rapidxml/rapidxml.hpp"
 #include "rapidxml/rapidxml_print.hpp"
@@ -42,7 +41,7 @@ bool tagsMatch( const std::string &tag1, const std::string &tag2, bool caseSensi
 {
 	if( caseSensitive && ( tag1 == tag2 ) )
 		return true;
-	else if( ( ! caseSensitive ) && ( boost::iequals( tag1, tag2 ) ) )
+	else if( ( ! caseSensitive ) && ( asciiCaseEqual( tag1, tag2 ) ) )
 		return true;
 	else
 		return false;
@@ -421,7 +420,7 @@ void XmlTree::write( DataTargetRef target, bool createDocument )
 
 XmlTree::ExcChildNotFound::ExcChildNotFound( const XmlTree &node, const string &childPath ) throw()
 {
-#if (defined (CINDER_MSW ) || defined( CINDER_WINRT ))
+#if defined( CINDER_MSW )
 	sprintf_s( mMessage, "Could not find child: %s for node: %s", childPath.c_str(), node.getPath().c_str() );
 #else
 	sprintf( mMessage, "Could not find child: %s for node: %s", childPath.c_str(), node.getPath().c_str() );
@@ -430,7 +429,7 @@ XmlTree::ExcChildNotFound::ExcChildNotFound( const XmlTree &node, const string &
 
 XmlTree::ExcAttrNotFound::ExcAttrNotFound( const XmlTree &node, const string &attrName ) throw()
 {
-#if (defined (CINDER_MSW ) || defined( CINDER_WINRT ))
+#if defined( CINDER_MSW )
 	sprintf_s( mMessage, "Could not find attribute: %s for node: %s", attrName.c_str(), node.getPath().c_str() );
 #else
 	sprintf( mMessage, "Could not find attribute: %s for node: %s", attrName.c_str(), node.getPath().c_str() );

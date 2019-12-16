@@ -29,12 +29,13 @@
 namespace cinder{ namespace app{
 
 //! Represents a keyboard event
-class KeyEvent : public Event {
+class CI_API KeyEvent : public Event {
   public:
-	KeyEvent() : Event()
+	KeyEvent()
+		: Event(), mCode( 0 ), mChar32( 0 ), mChar( 0 ), mModifiers( 0 ), mNativeKeyCode( 0 )
 	{}
-	KeyEvent( WindowRef win, int aCode, uint32_t aChar32, char aChar, unsigned int aModifiers, unsigned int aNativeKeyCode )
-		: Event( win ), mCode( aCode ), mChar32( aChar32 ), mChar( aChar ), mModifiers( aModifiers ), mNativeKeyCode( aNativeKeyCode )
+	KeyEvent( WindowRef win, int code, uint32_t c32, char c, unsigned int modifiers, unsigned int nativeKeyCode )
+		: Event( win ), mCode( code ), mChar32( c32 ), mChar( c ), mModifiers( modifiers ), mNativeKeyCode( nativeKeyCode )
 	{}
 
 	//! Returns the ASCII character associated with the event.
@@ -43,6 +44,8 @@ class KeyEvent : public Event {
 	uint32_t	getCharUtf32() const { return mChar32; } 
 	//! Returns the key code associated with the event, which maps into the enum listed below
 	int			getCode() const { return mCode; }
+	//! Returns the modifiers associated with the event. Can also use the convenience methods below to check for a specific modifiered,
+	unsigned int	getModifiers() const	{ return mModifiers; }
 	//! Returns whether the Shift key was pressed during the event.
 	bool		isShiftDown() const { return (mModifiers & SHIFT_DOWN) ? true : false; }
 	//! Returns whether the Alt (or Option) key was pressed during the event.
@@ -65,7 +68,7 @@ class KeyEvent : public Event {
 			ALT_DOWN	= 0x0010,
 			CTRL_DOWN	= 0x0020,
 			META_DOWN	= 0x0040,
-#if (defined( CINDER_MSW ) || defined( CINDER_WINRT ))
+#if defined( CINDER_MSW )
 			ACCEL_DOWN	= CTRL_DOWN
 #else
 			ACCEL_DOWN	= META_DOWN

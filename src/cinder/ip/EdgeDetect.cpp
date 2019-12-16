@@ -24,8 +24,6 @@
 #include "cinder/Surface.h"
 #include "cinder/CinderMath.h"
 
-#include <boost/preprocessor/seq.hpp>
-
 namespace cinder { namespace ip {
 
 //     X           Y
@@ -42,9 +40,9 @@ void edgeDetectSobel( const ChannelT<T> &srcChannel, const Area &srcArea, const 
 	const ivec2 &dstOffset( srcDst.second );
 	typename CHANTRAIT<T>::SignedSum sumX, sumY;
 
-	int32_t srcRowInc = srcChannel.getRowBytes() / sizeof(T);
-	int8_t srcPixelInc = srcChannel.getIncrement();
-	int8_t dstPixelInc = dstChannel->getIncrement();
+	ptrdiff_t srcRowInc = srcChannel.getRowBytes() / sizeof(T);
+	uint8_t srcPixelInc = srcChannel.getIncrement();
+	uint8_t dstPixelInc = dstChannel->getIncrement();
 	const T maxValue = CHANTRAIT<T>::max();
 	for( int32_t y = 1; y < area.getHeight() - 1; ++y ) {
 		const T *srcLine = srcChannel.getData( area.getX1() + 1, area.getY1() + y );
@@ -87,13 +85,15 @@ void edgeDetectSobel( const SurfaceT<T> &srcSurface, SurfaceT<T> *dstSuface )
 }
 
 
-#define edgeDetect_PROTOTYPES(r,data,T)\
-	template void edgeDetectSobel( const ChannelT<T> &srcChannel, const Area &srcArea, const ivec2 &dstLT, ChannelT<T> *dstChannel ); \
-	template void edgeDetectSobel( const SurfaceT<T> &srcSurface, const Area &srcArea, const ivec2 &dstLT, SurfaceT<T> *dstSurface ); \
-	template void edgeDetectSobel( const ChannelT<T> &srcChannel, ChannelT<T> *dstChannel );	\
-	template void edgeDetectSobel( const SurfaceT<T> &srcSurface, SurfaceT<T> *dstSurface );	
+#define edgeDetect_PROTOTYPES(T)\
+	template CI_API void edgeDetectSobel( const ChannelT<T> &srcChannel, const Area &srcArea, const ivec2 &dstLT, ChannelT<T> *dstChannel ); \
+	template CI_API void edgeDetectSobel( const SurfaceT<T> &srcSurface, const Area &srcArea, const ivec2 &dstLT, SurfaceT<T> *dstSurface ); \
+	template CI_API void edgeDetectSobel( const ChannelT<T> &srcChannel, ChannelT<T> *dstChannel );	\
+	template CI_API void edgeDetectSobel( const SurfaceT<T> &srcSurface, SurfaceT<T> *dstSurface );	
 
-BOOST_PP_SEQ_FOR_EACH( edgeDetect_PROTOTYPES, ~, (uint8_t)(uint16_t)(float) )
+edgeDetect_PROTOTYPES(uint8_t)
+edgeDetect_PROTOTYPES(uint16_t)
+edgeDetect_PROTOTYPES(float)
 
 
 } } // namespace cinder::ip

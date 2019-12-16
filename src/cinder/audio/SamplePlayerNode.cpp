@@ -31,7 +31,7 @@ using namespace std;
 namespace cinder { namespace audio {
 
 // ----------------------------------------------------------------------------------------------------
-// MARK: - SamplePlayerNode
+// SamplePlayerNode
 // ----------------------------------------------------------------------------------------------------
 
 SamplePlayerNode::SamplePlayerNode( const Format &format )
@@ -55,12 +55,12 @@ void SamplePlayerNode::stop()
 
 void SamplePlayerNode::start( double when )
 {
-	getContext()->schedule( when, shared_from_this(), true, [this] { start(); } );
+	getContext()->scheduleEvent( when, shared_from_this(), true, [this] { start(); } );
 }
 
 void SamplePlayerNode::stop( double when )
 {
-	getContext()->schedule( when, shared_from_this(), false, [this] { stop(); } );
+	getContext()->scheduleEvent( when, shared_from_this(), false, [this] { stop(); } );
 }
 
 void SamplePlayerNode::setLoopBegin( size_t positionFrames )
@@ -112,7 +112,7 @@ double SamplePlayerNode::getNumSeconds() const
 }
 
 // ----------------------------------------------------------------------------------------------------
-// MARK: - BufferPlayerNode
+// BufferPlayerNode
 // ----------------------------------------------------------------------------------------------------
 
 BufferPlayerNode::BufferPlayerNode( const Format &format )
@@ -163,8 +163,9 @@ void BufferPlayerNode::setBuffer( const BufferRef &buffer )
 
 	mBuffer = buffer;
 
-	if( ! mLoopEnd || mLoopEnd > mNumFrames )
-		mLoopEnd = mNumFrames;
+	// reset loop markers
+	mLoopBegin = 0;
+	mLoopEnd = mNumFrames;
 }
 
 void BufferPlayerNode::loadBuffer( const SourceFileRef &sourceFile )
@@ -212,7 +213,7 @@ void BufferPlayerNode::process( Buffer *buffer )
 }
 
 // ----------------------------------------------------------------------------------------------------
-// MARK: - FilePlayerNode
+// FilePlayerNode
 // ----------------------------------------------------------------------------------------------------
 
 FilePlayerNode::FilePlayerNode( const Format &format )
@@ -247,17 +248,17 @@ void FilePlayerNode::initialize()
 			mSourceFile = mSourceFile->cloneWithSampleRate( sampleRate );
 
 		mNumFrames = mSourceFile->getNumFrames();
+
+		mIoBuffer.setSize( mSourceFile->getMaxFramesPerRead(), getNumChannels() );
+
+		for( size_t i = 0; i < getNumChannels(); i++ )
+			mRingBuffers.emplace_back( mSourceFile->getMaxFramesPerRead() * mRingBufferPaddingFactor );
+
+		mBufferFramesThreshold = mRingBuffers[0].getSize() / 2;
 	}
 
 	if( ! mLoopEnd  || mLoopEnd > mNumFrames )
 		mLoopEnd = mNumFrames;
-
-	mIoBuffer.setSize( mSourceFile->getMaxFramesPerRead(), getNumChannels() );
-
-	for( size_t i = 0; i < getNumChannels(); i++ )
-		mRingBuffers.emplace_back( mSourceFile->getMaxFramesPerRead() * mRingBufferPaddingFactor );
-
-	mBufferFramesThreshold = mRingBuffers[0].getSize() / 2;
 
 	if( mIsReadAsync ) {
 		mAsyncReadShouldQuit = false;
@@ -268,6 +269,7 @@ void FilePlayerNode::initialize()
 void FilePlayerNode::uninitialize()
 {
 	destroyReadThreadImpl();
+	mRingBuffers.clear();
 }
 
 void FilePlayerNode::enableProcessing()
@@ -336,15 +338,15 @@ void FilePlayerNode::setSourceFile( const SourceFileRef &sourceFile )
 	else
 		mSourceFile = sourceFile->cloneWithSampleRate( sampleRate );
 
+	// reset num frames and loop markers
 	mNumFrames = mSourceFile->getNumFrames();
+	mLoopBegin = 0;
+	mLoopEnd = mNumFrames;
 
 	if( getNumChannels() != mSourceFile->getNumChannels() ) {
 		setNumChannels( mSourceFile->getNumChannels() );
 		configureConnections();
 	}
-
-	if( ! mLoopEnd  || mLoopEnd > mNumFrames )
-		mLoopEnd = mNumFrames;
 
 	if( wasEnabled )
 		enable();

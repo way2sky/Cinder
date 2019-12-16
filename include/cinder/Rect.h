@@ -30,7 +30,7 @@
 namespace cinder {
 
 template<typename T>
-class RectT {
+class CI_API RectT {
  public:
 	typedef glm::tvec2<T, glm::defaultp>	Vec2T;
 	typedef glm::tvec3<T, glm::defaultp>	Vec3T;
@@ -56,13 +56,20 @@ class RectT {
 	void		clipBy( const RectT &clip );
 	RectT		getClipBy( const RectT &clip ) const;
 	Area		getInteriorArea() const;
+	//! Translates the RectT by \a off
 	void		offset( const Vec2T &offset );
-	RectT		getOffset( const Vec2T &off ) const { RectT result( *this ); result.offset( off ); return result; }
+	//! Returns a copy of the RectT translated by \a off
+	RectT		getOffset( const Vec2T &off ) const;
+	//! Translates the RectT so that its upper-left corner is \a newUL
+	void		moveULTo( const Vec2T &newUL );
+	//! Returns a copy of the RectT translated so that its upper-left corner is \a newUL
+	RectT		getMoveULTo( const Vec2T &newUL ) const;
 	void		inflate( const Vec2T &amount );
 	RectT		inflated( const Vec2T &amount ) const;
 	//! Translates the rectangle so that its center is at \a center
 	void		offsetCenterTo( const Vec2T &center ) { offset( center - getCenter() ); }
 	void		scaleCentered( const Vec2T &scale );
+	RectT		scaledCentered( const Vec2T &scale ) const;
 	void		scaleCentered( T scale );
 	RectT		scaledCentered( T scale ) const;
 	void		scale( T scale );
@@ -132,7 +139,7 @@ class RectT {
 
 	T			x1, y1, x2, y2;
 	
-	friend std::ostream& operator<<( std::ostream &o, const RectT &rect )
+	friend CI_API std::ostream& operator<<( std::ostream &o, const RectT &rect )
 	{
 		return o << "(" << rect.x1 << ", " << rect.y1 << ")-(" << rect.x2 << ", " << rect.y2 << ")";
 	}	
@@ -144,7 +151,7 @@ typedef RectT<double>	Rectd;
 
 
 // This class maps a rectangle into another rectangle
-class RectMapping {
+class CI_API RectMapping {
  public:
     RectMapping()
         : mSrcRect( 0, 0, 0, 0 ), mDstRect( 0, 0, 0, 0 ) {}

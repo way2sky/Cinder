@@ -8,12 +8,22 @@
 #include "cinder/audio/GainNode.h"
 #include "cinder/audio/ChannelRouterNode.h"
 #include "cinder/audio/MonitorNode.h"
+#include "cinder/audio/SampleRecorderNode.h"
 #include "cinder/audio/dsp/Dsp.h"
 #include "cinder/audio/Exception.h"
 
-#include "../../common/AudioTestGui.h"
+#if defined( CINDER_MSW )
+#include "cinder/audio/msw/ContextWasapi.h"
+#endif
 
-// TODO: check iOS 6+ interruption handlers via notification
+#include "../../common/AudioTestGui.h"
+#include "../../../../samples/_audio/common/AudioDrawUtils.h"
+
+const bool USE_SECONDARY_SCREEN = 1;
+const bool WASAPI_EXCLUSIVE_MODE = 0;
+const bool SET_FRAMES_PER_BLOCK = 0;
+const size_t FRAMES_PER_BLOCK = 256;
+const double RECORD_SECONDS = 4.0;
 
 using namespace ci;
 using namespace ci::app;
@@ -29,15 +39,20 @@ class DeviceTestApp : public App {
 	void setInputDevice( const audio::DeviceRef &device, size_t numChannels = 0 );
 	void setupMultiChannelDevice( const string &deviceName );
 	void setupMultiChannelDeviceWindows( const string &deviceName );
+	void setupRolandOctaCaptureInputMonitoring();
 	void printDeviceDetails( const audio::DeviceRef &device );
+	void startRecording();
+	void writeRecordedToFile();
 
 	void setupSine();
 	void setupNoise();
+	void setupInputPulled();
 	void setupIOClean();
 	void setupIOProcessed();
 	void setupIOAndSine();
 	void setupSend();
 	void setupSendStereo();
+	void updateUIParams();
 
 	void setupTest( string test );
 	void setupUI();
@@ -48,12 +63,13 @@ class DeviceTestApp : public App {
 	audio::InputDeviceNodeRef		mInputDeviceNode;
 	audio::OutputDeviceNodeRef		mOutputDeviceNode;
 	audio::MonitorNodeRef			mMonitor;
+	audio::BufferRecorderNodeRef	mRecorder;
 	audio::GainNodeRef				mGain;
 	audio::GenNodeRef				mGen;
 
 	vector<TestWidget *> mWidgets;
 	VSelector mTestSelector, mInputSelector, mOutputSelector;
-	Button mPlayButton;
+	Button mPlayButton, mRecordButton;
 	HSlider mGainSlider;
 	TextInput mSamplerateInput, mFramesPerBlockInput, mNumInChannelsInput, mNumOutChannelsInput, mSendChannelInput;
 
@@ -64,32 +80,60 @@ class DeviceTestApp : public App {
 
 void DeviceTestApp::setup()
 {
-	console() << audio::Device::printDevicesToString();
+	console() << audio::Device::printDevicesToString() << endl;
 
 	auto ctx = audio::master();
 
-	mMonitor = ctx->makeNode( new audio::MonitorNode( audio::MonitorNode::Format().windowSize( 1024 ) ) );
+#if defined( CINDER_MSW )
+	if( WASAPI_EXCLUSIVE_MODE ) {
+		CI_LOG_I( "enabling WASAPI exlusive mode" );
+		dynamic_cast<audio::msw::ContextWasapi *>( ctx )->setExclusiveModeEnabled();
+	}
+#endif
+
+	mMonitor = ctx->makeNode( new audio::MonitorNode( audio::MonitorNode::Format().windowSize( 480 ) ) );
 	mGain = ctx->makeNode( new audio::GainNode() );
-	mGain->setValue( 0.4f );
+	//mGain = ctx->makeNode( new audio::GainNode( audio::Node::Format().channels( 1 ) ) ); // force mix down to mono
+	mGain->setValue( 0.8f );
 
 	mGain->connect( mMonitor );
 
 	setOutputDevice( audio::Device::getDefaultOutput() );
+//	setOutputDevice( audio::Device::getDefaultOutput(), 1 );
+	//setOutputDevice( audio::Device::findOutputByName( "1-2 (OCTA-CAPTURE)" ) );
+
 	setInputDevice( audio::Device::getDefaultInput() );
-	//setInputDevice( audio::Device::getDefaultInput(), 1 ); // force mono input
+	//setInputDevice( audio::Device::getDefaultInput(), 1 );
+	//setupRolandOctaCaptureInputMonitoring();
 
 	//setupMultiChannelDevice( "PreSonus FIREPOD (1431)" );
-//	setupMultiChannelDeviceWindows( "MOTU Analog (MOTU Audio Wave for 64 bit)" );
+	//setupMultiChannelDeviceWindows( "MOTU Analog (MOTU Audio Wave for 64 bit)" );
 
-	PRINT_GRAPH( ctx );
+	mRecorder = ctx->makeNode( new audio::BufferRecorderNode( RECORD_SECONDS * ctx->getSampleRate() ) );
+	mRecorder->setEnabled( false );
+	mGain >> mRecorder;
 
 	setupUI();
+	setupTest( mTestSelector.currentSection() );
 
-	CI_LOG_V( "Context samplerate: " << ctx->getSampleRate() );
+	//setupInputPulled();
+	//setupIOClean();
+
+	PRINT_GRAPH( ctx );
+	CI_LOG_I( "Context samplerate: " << ctx->getSampleRate() << ", frames per block: " << ctx->getFramesPerBlock() );
 }
 
 void DeviceTestApp::setOutputDevice( const audio::DeviceRef &device, size_t numChannels )
 {
+	if( ! device ) {
+		CI_LOG_E( "Empty DeviceRef" );
+		return;
+	}
+
+	if( SET_FRAMES_PER_BLOCK ) {
+		device->updateFormat( audio::Device::Format().framesPerBlock( FRAMES_PER_BLOCK ) );
+	}
+
 	auto ctx = audio::master();
 
 	ctx->uninitializeAllNodes();
@@ -100,11 +144,12 @@ void DeviceTestApp::setOutputDevice( const audio::DeviceRef &device, size_t numC
 
 	mOutputDeviceNode = ctx->createOutputDeviceNode( device, format );
 
-	mOutputDeviceNode->getDevice()->getSignalParamsDidChange().connect(
+	mOutputDeviceNode->getDevice()->getSignalParamsDidChange().connect( -1,
 							[this] {
-								CI_LOG_V( "OutputDeviceNode params changed:" );
+								CI_LOG_I( "OutputDeviceNode params changed:" );
 								printDeviceDetails( mOutputDeviceNode->getDevice() );
-								PRINT_GRAPH( audio::master() );
+								updateUIParams();
+								//PRINT_GRAPH( audio::master() );
 							} );
 
 
@@ -117,7 +162,7 @@ void DeviceTestApp::setOutputDevice( const audio::DeviceRef &device, size_t numC
 
 	ctx->initializeAllNodes();
 
-	CI_LOG_V( "OutputDeviceNode device properties: " );
+	CI_LOG_I( "OutputDeviceNode device properties: " );
 	printDeviceDetails( device );
 
 	// TODO: considering doing this automatically in Context::setOutput, but then also have to worry about initialize()
@@ -128,7 +173,16 @@ void DeviceTestApp::setOutputDevice( const audio::DeviceRef &device, size_t numC
 
 void DeviceTestApp::setInputDevice( const audio::DeviceRef &device, size_t numChannels  )
 {
+	if( ! device ) {
+		CI_LOG_E( "Empty DeviceRef" );
+		return;
+	}
+
 	audio::ScopedEnableNode enableNodeScope( mInputDeviceNode, false );
+
+	if( SET_FRAMES_PER_BLOCK ) {
+		device->updateFormat( audio::Device::Format().framesPerBlock( FRAMES_PER_BLOCK ) );
+	}
 
 	if( mInputDeviceNode )
 		mInputDeviceNode->disconnectAllOutputs();
@@ -139,9 +193,7 @@ void DeviceTestApp::setInputDevice( const audio::DeviceRef &device, size_t numCh
 
 	mInputDeviceNode = audio::master()->createInputDeviceNode( device, format );
 
-	setupTest( mTestSelector.currentSection() );
-
-	CI_LOG_V( "InputDeviceNode device properties: " );
+	CI_LOG_I( "InputDeviceNode device properties: " );
 	printDeviceDetails( device );
 }
 
@@ -155,31 +207,53 @@ void DeviceTestApp::setupMultiChannelDevice( const string &deviceName )
 
 	setOutputDevice( dev, dev->getNumOutputChannels() );
 	setInputDevice( dev, dev->getNumInputChannels() );
-
 }
 
 void DeviceTestApp::setupMultiChannelDeviceWindows(  const string &deviceName )
 {
-	audio::DeviceRef inputDev, outputDev;
-
-	for( auto &dev : audio::Device::getDevices() ) {
-		if( dev->getName() == deviceName ) {
-			if( dev->getNumOutputChannels() > 2 )
-				outputDev = dev;
-			if( dev->getNumInputChannels() > 2 )
-				inputDev = dev;
-		}
-	}
-
+	auto outputDev = audio::Device::findOutputByName( deviceName );
 	if( outputDev )
 		setOutputDevice( outputDev, outputDev->getNumOutputChannels() );
 	else
-		CI_LOG_E( "could not find output device with channels > 2 named: " << deviceName );
+		CI_LOG_E( "could not find output device named: " << deviceName );
 
+	auto inputDev = audio::Device::findInputByName( deviceName );
 	if( inputDev )
 		setInputDevice( inputDev, inputDev->getNumInputChannels() );
 	else
-		CI_LOG_E( "could not find input device with channels > 2 named: " << deviceName );
+		CI_LOG_E( "could not find input device named: " << deviceName );
+}
+
+void DeviceTestApp::setupRolandOctaCaptureInputMonitoring()
+{
+	vector<string> deviceNames = {
+		"1-2 (OCTA-CAPTURE)",
+		"3-4 (OCTA-CAPTURE)",
+		"5-6 (OCTA-CAPTURE)"//,
+		//"7-8 (OCTA-CAPTURE)",
+		//"9-10 (OCTA-CAPTURE)"
+	};
+
+	size_t numChannels = deviceNames.size() * 2;
+	auto channelRouter = audio::master()->makeNode<audio::ChannelRouterNode>( audio::Node::Format().channels( numChannels ) );
+
+	channelRouter >> mGain;
+
+	for( size_t i = 0; i < deviceNames.size(); i++ ) {
+		auto devName = deviceNames[i];
+		auto inputDev = audio::Device::findInputByName( devName );
+		if( inputDev ) {
+			if( SET_FRAMES_PER_BLOCK ) {
+				inputDev->updateFormat( audio::Device::Format().framesPerBlock( FRAMES_PER_BLOCK ) );
+			}
+
+			auto inputNode = audio::master()->createInputDeviceNode( inputDev );
+			inputNode >> channelRouter->route( 0, i * 2 );
+			inputNode->enable();
+		}
+		else
+			CI_LOG_E( "could not find input device named: " << devName );
+	}
 }
 
 void DeviceTestApp::printDeviceDetails( const audio::DeviceRef &device )
@@ -188,7 +262,7 @@ void DeviceTestApp::printDeviceDetails( const audio::DeviceRef &device )
 	console() << "\t output channels: " << device->getNumOutputChannels() << endl;
 	console() << "\t input channels: " << device->getNumInputChannels() << endl;
 	console() << "\t samplerate: " << device->getSampleRate() << endl;
-	console() << "\t block size: " << device->getFramesPerBlock() << endl;
+	console() << "\t frames per block: " << device->getFramesPerBlock() << endl;
 
 	bool isSyncIO = mInputDeviceNode && mOutputDeviceNode && ( mInputDeviceNode->getDevice() == mOutputDeviceNode->getDevice() && ( mInputDeviceNode->getNumChannels() == mOutputDeviceNode->getNumChannels() ) );
 
@@ -212,14 +286,37 @@ void DeviceTestApp::setupNoise()
 	mGen->enable();
 }
 
+void DeviceTestApp::setupInputPulled()
+{
+	if( ! mInputDeviceNode ) {
+		CI_LOG_E( "no InputDeviceNode" );
+		return;
+	}
+
+	mOutputDeviceNode->disconnectAllInputs();
+
+	mInputDeviceNode >> mGain >> mMonitor;
+	mInputDeviceNode->enable();
+}
+
 void DeviceTestApp::setupIOClean()
 {
+	if( ! mInputDeviceNode ) {
+		CI_LOG_E( "no InputDeviceNode" );
+		return;
+	}
+
 	mInputDeviceNode->connect( mGain );
 	mInputDeviceNode->enable();
 }
 
 void DeviceTestApp::setupIOProcessed()
 {
+	if( ! mInputDeviceNode ) {
+		CI_LOG_E( "no InputDeviceNode" );
+		return;
+	}
+
 	auto ctx = audio::master();
 	auto mod = ctx->makeNode( new audio::GenSineNode( audio::Node::Format().autoEnable() ) );
 	mod->setFreq( 200 );
@@ -242,6 +339,11 @@ void DeviceTestApp::setupIOAndSine()
 	mGen->connect( mGain );
 	mGen->enable();
 
+	if( ! mInputDeviceNode ) {
+		CI_LOG_E( "no InputDeviceNode" );
+		return;
+	}
+
 	mInputDeviceNode->connect( mGain );
 	mInputDeviceNode->enable();
 }
@@ -258,7 +360,7 @@ void DeviceTestApp::setupSend()
 	auto input = mGen;
 
 	int channelIndex = mSendChannelInput.getValue();
-	CI_LOG_V( "routing input to channel: " << channelIndex );
+	CI_LOG_I( "routing input to channel: " << channelIndex );
 
 	input >> mGain >> router->route( 0, channelIndex );
 	router >> mMonitor >> ctx->getOutput();
@@ -275,12 +377,33 @@ void DeviceTestApp::setupSendStereo()
 	auto upmix = ctx->makeNode( new audio::Node( audio::Node::Format().channels( 2 ) ) );
 
 	int channelIndex = mSendChannelInput.getValue();
-	CI_LOG_V( "routing input to channel: " << channelIndex );
+	CI_LOG_I( "routing input to channel: " << channelIndex );
 
 	mGen >> upmix >> mGain >> router->route( 0, channelIndex );
 	router >> mMonitor >> ctx->getOutput();
 
 	mGen->enable();
+}
+
+void DeviceTestApp::startRecording()
+{
+	CI_LOG_I( "begin record..." );
+
+	mRecorder->start();
+	timeline().add( [this] {
+		writeRecordedToFile();
+		mRecorder->disable();
+	}, timeline().getCurrentTime() + RECORD_SECONDS );
+}
+
+void DeviceTestApp::writeRecordedToFile()
+{
+	const string fileName = "recorder_out.wav";
+	CI_LOG_I( "writing to: " << fileName );
+
+	mRecorder->writeToFile( fileName );
+
+	CI_LOG_I( "...complete." );
 }
 
 void DeviceTestApp::setupUI()
@@ -291,22 +414,29 @@ void DeviceTestApp::setupUI()
 	mPlayButton = Button( true, "stopped", "playing" );
 	mWidgets.push_back( &mPlayButton );
 
+	mRecordButton = Button( false, "record" );
+	mWidgets.push_back( &mRecordButton );
+
 	mTestSelector.mSegments.push_back( "sinewave" );
 	mTestSelector.mSegments.push_back( "noise" );
+	mTestSelector.mSegments.push_back( "input (pulled)" );
 	mTestSelector.mSegments.push_back( "I/O (clean)" );
 	mTestSelector.mSegments.push_back( "I/O (processed)" );
 	mTestSelector.mSegments.push_back( "I/O and sine" );
 	mTestSelector.mSegments.push_back( "send" );
 	mTestSelector.mSegments.push_back( "send stereo" );
+	mTestSelector.mCurrentSectionIndex = 0;
 	mWidgets.push_back( &mTestSelector );
 
 #if defined( CINDER_COCOA_TOUCH )
 	mPlayButton.mBounds = Rectf( 0, 0, 120, 60 );
+	mRecordButton.mBounds = Rectf( 130, 0, 190, 34 );
 	mTestSelector.mBounds = Rectf( getWindowWidth() - 190, 0, getWindowWidth(), 180 );
 #else
 	mPlayButton.mBounds = Rectf( 0, 0, 200, 60 );
-	mTestSelector.mBounds = Rectf( getWindowCenter().x + 110, 0, (float)getWindowWidth(), 180 );
+	mRecordButton.mBounds = Rectf( 210, 0, 310, 40 );
 #endif
+	mTestSelector.mBounds = Rectf( (float)getWindowWidth() - 210, 0, (float)getWindowWidth(), 180 );
 
 	mGainSlider.mBounds = Rectf( mTestSelector.mBounds.x1, mTestSelector.mBounds.y2 + 10, mTestSelector.mBounds.x2, mTestSelector.mBounds.y2 + 50 );
 	mGainSlider.mTitle = "GainNode";
@@ -326,7 +456,7 @@ void DeviceTestApp::setupUI()
 
 	mInputSelector.mTitle = "Input Devices";
 	mInputSelector.mBounds = mOutputSelector.mBounds - vec2( mOutputSelector.mBounds.getWidth() + 10, 0 );
-	if( mOutputDeviceNode ) {
+	if( mInputDeviceNode ) {
 		for( const auto &dev : audio::Device::getInputDevices() ) {
 			if( dev == mInputDeviceNode->getDevice() )
 				mInputSelector.mCurrentSectionIndex = mInputSelector.mSegments.size();
@@ -399,6 +529,8 @@ void DeviceTestApp::processTap( ivec2 pos )
 //	TextInput *selectedInput = false;
 	if( mPlayButton.hitTest( pos ) )
 		audio::master()->setEnabled( ! audio::master()->isEnabled() );
+	else if( mRecordButton.hitTest( pos ) )
+		startRecording();
 	else if( mSamplerateInput.hitTest( pos ) ) {
 	}
 	else if( mFramesPerBlockInput.hitTest( pos ) ) {
@@ -419,7 +551,7 @@ void DeviceTestApp::processTap( ivec2 pos )
 	size_t currentTestIndex = mTestSelector.mCurrentSectionIndex;
 	if( mTestSelector.hitTest( pos ) && currentTestIndex != mTestSelector.mCurrentSectionIndex ) {
 		string currentTest = mTestSelector.currentSection();
-		CI_LOG_V( "selected: " << currentTest );
+		CI_LOG_I( "selected: " << currentTest );
 
 		setupTest( currentTest );
 		return;
@@ -427,19 +559,21 @@ void DeviceTestApp::processTap( ivec2 pos )
 
 	size_t currentOutputIndex = mOutputSelector.mCurrentSectionIndex;
 	if( mOutputSelector.hitTest( pos ) && currentOutputIndex != mOutputSelector.mCurrentSectionIndex ) {
-		auto dev = audio::Device::findDeviceByName( mOutputSelector.mSegments[mOutputSelector.mCurrentSectionIndex] );
-		CI_LOG_V( "selected output device named: " << dev->getName() << ", key: " << dev->getKey() );
+		auto dev = audio::Device::findOutputByName( mOutputSelector.mSegments[mOutputSelector.mCurrentSectionIndex] );
+		CI_LOG_I( "selected output device named: " << dev->getName() << ", key: " << dev->getKey() );
 
 		setOutputDevice( dev );
+		// Don't need to reset test as the Device will be updated on the Context's OutputDeviceNode and the change will propagate through the graph
 		return;
 	}
 
 	size_t currentInputIndex = mInputSelector.mCurrentSectionIndex;
 	if( mInputSelector.hitTest( pos ) && currentInputIndex != mInputSelector.mCurrentSectionIndex ) {
-		auto dev = audio::Device::findDeviceByName( mInputSelector.mSegments[mInputSelector.mCurrentSectionIndex] );
-		CI_LOG_V( "selected input named: " << dev->getName() << ", key: " << dev->getKey() );
+		auto dev = audio::Device::findInputByName( mInputSelector.mSegments[mInputSelector.mCurrentSectionIndex] );
+		CI_LOG_I( "selected input named: " << dev->getName() << ", key: " << dev->getKey() );
 
 		setInputDevice( dev );
+		setupTest( mTestSelector.currentSection() ); // need to reset the test so that we construct the InputDeviceNode with the proper Device
 		return;
 	}
 }
@@ -449,7 +583,7 @@ void DeviceTestApp::setupTest( string test )
 	if( test.empty() )
 		test = "sinewave";
 
-	CI_LOG_V( "test: " << test );
+	CI_LOG_I( "test: " << test );
 
 	// FIXME: Switching from 'noise' to 'i/o' on mac is causing a deadlock when initializing InputDeviceNodeAudioUnit.
 	//	- it shouldn't have to be stopped, need to check why.
@@ -462,6 +596,8 @@ void DeviceTestApp::setupTest( string test )
 		setupSine();
 	else if( test == "noise" )
 		setupNoise();
+	else if( test == "input (pulled)" )
+		setupInputPulled();
 	else if( test == "I/O (clean)" )
 		setupIOClean();
 	else if( test == "I/O (processed)" )
@@ -495,22 +631,22 @@ void DeviceTestApp::keyDown( KeyEvent event )
 		try {
 			if( currentSelected == &mSamplerateInput ) {
 				int sr = currentSelected->getValue();
-				CI_LOG_V( "updating samplerate from: " << mOutputDeviceNode->getSampleRate() << " to: " << sr );
+				CI_LOG_I( "updating samplerate from: " << mOutputDeviceNode->getSampleRate() << " to: " << sr );
 				mOutputDeviceNode->getDevice()->updateFormat( audio::Device::Format().sampleRate( sr ) );
 			}
 			else if( currentSelected == &mFramesPerBlockInput ) {
 				int frames = currentSelected->getValue();
-				CI_LOG_V( "updating frames per block from: " << mOutputDeviceNode->getFramesPerBlock() << " to: " << frames );
+				CI_LOG_I( "updating frames per block from: " << mOutputDeviceNode->getFramesPerBlock() << " to: " << frames );
 				mOutputDeviceNode->getDevice()->updateFormat( audio::Device::Format().framesPerBlock( frames ) );
 			}
 			else if( currentSelected == &mNumInChannelsInput ) {
 				int numChannels = currentSelected->getValue();
-				CI_LOG_V( "updating nnm input channels from: " << mInputDeviceNode->getNumChannels() << " to: " << numChannels );
+				CI_LOG_I( "updating nnm input channels from: " << mInputDeviceNode->getNumChannels() << " to: " << numChannels );
 				setInputDevice( mInputDeviceNode->getDevice(), numChannels );
 			}
 			else if( currentSelected == &mNumOutChannelsInput ) {
 				int numChannels = currentSelected->getValue();
-				CI_LOG_V( "updating nnm output channels from: " << mOutputDeviceNode->getNumChannels() << " to: " << numChannels );
+				CI_LOG_I( "updating nnm output channels from: " << mOutputDeviceNode->getNumChannels() << " to: " << numChannels );
 				setOutputDevice( mOutputDeviceNode->getDevice(), numChannels );
 			}
 			else if( currentSelected == &mSendChannelInput ) {
@@ -552,6 +688,22 @@ void DeviceTestApp::update()
 		if( mOutputDeviceNode->getLastClip() )
 			timeline().apply( &mOutputDeviceNodeClipFade, 1.0f, 0.0f, xrunFadeTime );
 	}
+
+	//if( getElapsedFrames() % 20 == 0 ) {
+	//	CI_LOG_I( "framerate: " << to_string( getAverageFps() ) );
+	//}
+}
+
+void DeviceTestApp::updateUIParams()
+{
+	auto ctx = audio::master();
+	
+	if( mSamplerateInput.getValue() != ctx->getSampleRate() ) {
+		mSamplerateInput.setValue( ctx->getSampleRate() );
+	}
+	if( mFramesPerBlockInput.getValue() != ctx->getFramesPerBlock() ) {
+		mFramesPerBlockInput.setValue( ctx->getFramesPerBlock() );
+	}
 }
 
 void DeviceTestApp::draw()
@@ -563,26 +715,12 @@ void DeviceTestApp::draw()
 	gl::translate( 0, mViewYOffset );
 
 	if( mMonitor && mMonitor->isEnabled() ) {
-		const audio::Buffer &buffer = mMonitor->getBuffer();
 
-		float padding = 20;
-		float waveHeight = ((float)getWindowHeight() - padding * 3.0f ) / (float)buffer.getNumChannels();
-
-		float yOffset = padding;
-		float xScale = (float)getWindowWidth() / (float)buffer.getNumFrames();
-		for( size_t ch = 0; ch < buffer.getNumChannels(); ch++ ) {
-			PolyLine2f waveform;
-			const float *channel = buffer.getChannel( ch );
-			for( size_t i = 0; i < buffer.getNumFrames(); i++ ) {
-				float x = i * xScale;
-				float y = ( channel[i] * 0.5f + 0.5f ) * waveHeight + yOffset;
-				waveform.push_back( vec2( x, y ) );
-			}
-			gl::draw( waveform );
-			yOffset += waveHeight + padding;
-		}
+		Rectf scopeRect( 10, 10, (float)getWindowWidth() - 10, (float)getWindowHeight() - 10 );
+		drawAudioBuffer( mMonitor->getBuffer(), scopeRect, true );
 
 		float volume = mMonitor->getVolume();
+		const float padding = 20;
 		Rectf volumeRect( mGainSlider.mBounds.x1, mGainSlider.mBounds.y2 + padding, mGainSlider.mBounds.x1 + mGainSlider.mBounds.getWidth() * volume, mGainSlider.mBounds.y2 + padding + 20 );
 		gl::drawSolidRect( volumeRect );
 	}
@@ -609,5 +747,25 @@ void DeviceTestApp::draw()
 }
 
 CINDER_APP( DeviceTestApp, RendererGl, []( App::Settings *settings ) {
-	settings->setWindowSize( 800, 600 );
+	bool useSecondaryScreen = ( USE_SECONDARY_SCREEN && Display::getDisplays().size() > 1 );
+
+	if( useSecondaryScreen ) {
+		for( const auto &display : Display::getDisplays() ) {
+			//CI_LOG_I( "display name: " << display->getName() );
+			if( display->getName() == "Color LCD" ) {
+				// macbook
+				settings->setDisplay( display );
+				settings->setWindowSize( 1280, 720 );
+			}
+			else if( display->getName() == "Generic PnP Monitor" ) {
+				// gechic 1303i 13"touch display
+				settings->setDisplay( display );
+				settings->setFullScreen( true );
+			}
+		}
+	}
+	else {
+		settings->setWindowPos( 0, 0 );
+		settings->setWindowSize( 960, 565 );
+	}
 } )

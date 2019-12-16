@@ -29,7 +29,7 @@ using namespace std;
 namespace cinder { namespace audio {
 
 // ----------------------------------------------------------------------------------------------------
-// MARK: - InputNode
+// InputNode
 // ----------------------------------------------------------------------------------------------------
 
 InputNode::InputNode( const Format &format )
@@ -38,7 +38,7 @@ InputNode::InputNode( const Format &format )
 	if( getChannelMode() != ChannelMode::SPECIFIED )
 		setChannelMode( ChannelMode::MATCHES_OUTPUT );
 
-	if( boost::indeterminate( format.getAutoEnable() ) )
+	if( ! format.isAutoEnableSet() )
 		setAutoEnabled( false );
 }
 
@@ -46,18 +46,26 @@ InputNode::~InputNode()
 {
 }
 
-void InputNode::connectInput( const NodeRef &input )
+void InputNode::connectInput( const NodeRef & /*input*/ )
 {
 	CI_ASSERT_MSG( 0, "InputNode does not support inputs" );
 }
 
 // ----------------------------------------------------------------------------------------------------
-// MARK: - InputDeviceNode
+// InputDeviceNode
 // ----------------------------------------------------------------------------------------------------
 
 InputDeviceNode::InputDeviceNode( const DeviceRef &device, const Format &format )
 	: InputNode( format ), mDevice( device ), mLastOverrun( 0 ), mLastUnderrun( 0 )
 {
+	if( ! mDevice ) {
+		string errorMsg = "Empty DeviceRef.";
+		if( ! audio::Device::getDefaultInput() )
+			errorMsg += " Also, no default input Device so perhaps there is no available hardware input.";
+
+		throw AudioDeviceExc( errorMsg );
+	}
+
 	size_t deviceNumChannels = mDevice->getNumInputChannels();
 
 	// If number of channels hasn't been specified, default to 2.
@@ -107,8 +115,18 @@ void InputDeviceNode::markOverrun()
 	mLastOverrun = getContext()->getNumProcessedFrames();
 }
 
+void InputDeviceNode::setRingBufferPaddingFactor( float factor )
+{
+	mRingBufferPaddingFactor = max<float>( 1, factor );
+}
+
+string InputDeviceNode::getName() const
+{
+	return Node::getName() + " (" + getDevice()->getName() + ")";
+}
+
 // ----------------------------------------------------------------------------------------------------
-// MARK: - CallbackProcessorNode
+// CallbackProcessorNode
 // ----------------------------------------------------------------------------------------------------
 
 CallbackProcessorNode::CallbackProcessorNode( const CallbackProcessorFn &callbackFn, const Format &format )

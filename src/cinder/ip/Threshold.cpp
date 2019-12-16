@@ -24,8 +24,6 @@
 #include "cinder/ChanTraits.h"
 
 #include <stdlib.h>
-#include <boost/preprocessor/seq.hpp>
-
 
 namespace cinder { namespace ip {
 
@@ -33,7 +31,7 @@ template<typename T>
 void thresholdImpl( SurfaceT<T> *surface, T value, const Area &area )
 {
 	const Area clippedArea = area.getClipBy( surface->getBounds() );
-	int32_t rowBytes = surface->getRowBytes();
+	ptrdiff_t rowBytes = surface->getRowBytes();
 	uint8_t pixelInc = surface->getPixelInc();
 	uint8_t redOffset = surface->getRedOffset(), greenOffset = surface->getGreenOffset(), blueOffset = surface->getBlueOffset();
 	T maxValue = CHANTRAIT<T>::max();
@@ -55,11 +53,11 @@ void thresholdImpl( const SurfaceT<T> &srcSurface, T value, const Area &srcArea,
 	const Area &area( srcDst.first );
 	const ivec2 &dstOffset( srcDst.second );
 
-	int32_t srcRowBytes = srcSurface.getRowBytes();
-	int8_t srcPixelInc = srcSurface.getPixelInc();
+	ptrdiff_t srcRowBytes = srcSurface.getRowBytes();
+	uint8_t srcPixelInc = srcSurface.getPixelInc();
 	uint8_t srcRedOffset = srcSurface.getRedOffset(), srcGreenOffset = srcSurface.getGreenOffset(), srcBlueOffset = srcSurface.getBlueOffset();
-	int32_t dstRowBytes = dstSurface->getRowBytes();
-	int8_t dstPixelInc = dstSurface->getPixelInc();
+	ptrdiff_t dstRowBytes = dstSurface->getRowBytes();
+	uint8_t dstPixelInc = dstSurface->getPixelInc();
 	uint8_t dstRedOffset = dstSurface->getRedOffset(), dstGreenOffset = dstSurface->getGreenOffset(), dstBlueOffset = dstSurface->getBlueOffset();
 	const T maxValue = CHANTRAIT<T>::max();
 	for( int32_t y = 0; y < area.getHeight(); ++y ) {
@@ -82,8 +80,8 @@ void thresholdImpl( const ChannelT<T> &srcChannel, T value, const Area &srcArea,
 	const Area &area( srcDst.first );
 	const ivec2 &dstOffset( srcDst.second );
 
-	int8_t srcInc = srcChannel.getIncrement();
-	int8_t dstInc = dstChannel->getIncrement();
+	uint8_t srcInc = srcChannel.getIncrement();
+	uint8_t dstInc = dstChannel->getIncrement();
 	const T maxValue = CHANTRAIT<T>::max();
 	for( int32_t y = 0; y < area.getHeight(); ++y ) {
 		T *dstPtr = dstChannel->getData( ivec2( area.getX1(), y ) + dstOffset );
@@ -220,7 +218,7 @@ template<typename T>
 void calculateIntegralImage( const ChannelT<T> &channel, typename CHANTRAIT<T>::Accum *integralImage )
 {
 	int32_t imageWidth = channel.getWidth(), imageHeight = channel.getHeight();
-	int32_t srcRowBytes = channel.getRowBytes();
+	ptrdiff_t srcRowBytes = channel.getRowBytes();
 	uint8_t srcInc = channel.getIncrement();
 	const T *src = channel.getData();
 	/*for( int32_t i = 0; i < imageWidth; i++ ) {
@@ -348,20 +346,19 @@ void AdaptiveThresholdT<T>::calculate( int32_t windowSize, float percentageDelta
 	}
 }
 
-template class AdaptiveThresholdT<uint8_t>;
-template class AdaptiveThresholdT<float>;
+template class CI_API AdaptiveThresholdT<uint8_t>;
+template class CI_API AdaptiveThresholdT<float>;
 
-#define threshold_PROTOTYPES(r,data,T)\
-	template void threshold( SurfaceT<T> *surface, T value ); \
-	template void threshold( SurfaceT<T> *surface, T value, const Area &area ); \
-	template void threshold( const SurfaceT<T> &srcSurface, T value, SurfaceT<T> *dstSurface );\
-	template void threshold( const ChannelT<T> &srcChannel, T value, ChannelT<T> *dstChannel );\
-	template void adaptiveThreshold( const ChannelT<T> &srcChannel, int32_t windowSize, float percentageDelta, ChannelT<T> *dstChannel ); \
-	template void adaptiveThreshold( ChannelT<T> *channel, int32_t windowSize, float percentageDelta ); \
-	template void adaptiveThresholdZero( ChannelT<T> *channel, int32_t windowSize ); \
-	template void adaptiveThresholdZero( const ChannelT<T> &srcChannel, int32_t windowSize, ChannelT<T> *dstChannel );
+#define threshold_PROTOTYPES(T)\
+	template CI_API void threshold( SurfaceT<T> *surface, T value ); \
+	template CI_API void threshold( SurfaceT<T> *surface, T value, const Area &area ); \
+	template CI_API void threshold( const SurfaceT<T> &srcSurface, T value, SurfaceT<T> *dstSurface );\
+	template CI_API void threshold( const ChannelT<T> &srcChannel, T value, ChannelT<T> *dstChannel );\
+	template CI_API void adaptiveThreshold( const ChannelT<T> &srcChannel, int32_t windowSize, float percentageDelta, ChannelT<T> *dstChannel ); \
+	template CI_API void adaptiveThreshold( ChannelT<T> *channel, int32_t windowSize, float percentageDelta ); \
+	template CI_API void adaptiveThresholdZero( ChannelT<T> *channel, int32_t windowSize ); \
+	template CI_API void adaptiveThresholdZero( const ChannelT<T> &srcChannel, int32_t windowSize, ChannelT<T> *dstChannel );
 
-BOOST_PP_SEQ_FOR_EACH( threshold_PROTOTYPES, ~, (uint8_t) )
-
+threshold_PROTOTYPES(uint8_t)
 
 } } // namespace cinder::ip

@@ -37,26 +37,15 @@ namespace cinder { namespace audio { namespace cocoa {
 void printASBD( const ::AudioStreamBasicDescription &asbd );
 
 struct AudioBufferListDeleter {
-	void operator()( ::AudioBufferList *bufferList )
-	{
-		for( size_t i = 0; i < bufferList->mNumberBuffers; i++ )
-			free( bufferList->mBuffers[i].mData );
-		free( bufferList );
-	}
-};
+	void operator()( ::AudioBufferList *bufferList );
 
-struct AudioBufferListShallowDeleter {
-	void operator()( ::AudioBufferList *bufferList )
-	{
-		free( bufferList );
-	}
+	bool mShallow = false;
 };
 
 typedef std::unique_ptr<::AudioBufferList, AudioBufferListDeleter> AudioBufferListPtr;
-typedef std::unique_ptr<::AudioBufferList, AudioBufferListShallowDeleter> AudioBufferListShallowPtr;
 
 AudioBufferListPtr createNonInterleavedBufferList( size_t numFrames, size_t numChannels );
-AudioBufferListShallowPtr createNonInterleavedBufferListShallow( size_t numChannels );
+AudioBufferListPtr createNonInterleavedBufferListShallow( size_t numChannels );
 
 
 ::AudioComponent findAudioComponent( const ::AudioComponentDescription &componentDescription );
@@ -71,6 +60,14 @@ inline void copyToBufferList( ::AudioBufferList *bufferList, const Buffer *buffe
 		memcpy( bufferList->mBuffers[i].mData, buffer->getChannel( i ), bufferList->mBuffers[i].mDataByteSize );
 }
 
+inline void copyToBufferList( ::AudioBufferList *bufferList, const Buffer *buffer, size_t startFrame, size_t frameCount )
+{
+	for( UInt32 i = 0; i < bufferList->mNumberBuffers; i++ ) {
+		Float32 *startPtr = static_cast<Float32 *>( bufferList->mBuffers[i].mData ) + startFrame;
+		memcpy( startPtr, buffer->getChannel( i ), frameCount * sizeof( Float32 ) );
+	}
+}
+
 inline void copyFromBufferList( Buffer *buffer, const ::AudioBufferList *bufferList )
 {
 	for( UInt32 i = 0; i < bufferList->mNumberBuffers; i++ )
@@ -81,6 +78,14 @@ inline void zeroBufferList( const ::AudioBufferList *bufferList )
 {
 	for( UInt32 i = 0; i < bufferList->mNumberBuffers; i++ )
 		memset( bufferList->mBuffers[i].mData, 0, bufferList->mBuffers[i].mDataByteSize );
+}
+
+inline void zeroBufferList( const ::AudioBufferList *bufferList, size_t startFrame, size_t frameCount )
+{
+	for( UInt32 i = 0; i < bufferList->mNumberBuffers; i++ ) {
+		Float32 *startPtr = static_cast<Float32 *>( bufferList->mBuffers[i].mData ) + startFrame;
+		memset( startPtr, 0, frameCount * sizeof( Float32 ) );
+	}
 }
 
 // ----------------------------------------------------------------------------------------------------
@@ -103,7 +108,7 @@ class ConverterImplCoreAudio : public dsp::Converter {
 	const Buffer *mSourceBuffer;
 	size_t mNumReadFramesNeeded, mNumSourceBufferFramesUsed;
 
-	AudioBufferListShallowPtr mOutputBufferList;
+	AudioBufferListPtr mOutputBufferList;
 	::AudioConverterRef mAudioConverter;
 };
 

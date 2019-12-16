@@ -27,9 +27,9 @@
 #include "cinder/audio/Device.h"
 
 #if defined( __OBJC__ )
-	@class AudioSessionInterruptionHandlerImpl;
+	@class AudioSessionNotificationHandlerImpl;
 #else
-	class AudioSessionInterruptionHandlerImpl;
+	class AudioSessionNotificationHandlerImpl;
 #endif
 
 namespace cinder { namespace audio { namespace cocoa {
@@ -43,7 +43,7 @@ class DeviceManagerAudioSession : public DeviceManager {
 
 	DeviceRef	getDefaultOutput()								override;
 	DeviceRef	getDefaultInput()								override;
-	DeviceRef	findDeviceByName( const std::string &name )		override;
+	DeviceRef	findDeviceByName( const std::string &name, bool supportsOutput, bool supportsInput )		override;
 	DeviceRef	findDeviceByKey( const std::string &key )		override;
 
 	const std::vector<DeviceRef>&	getDevices()				override;
@@ -60,19 +60,21 @@ class DeviceManagerAudioSession : public DeviceManager {
 	void setInputEnabled( bool enable = true );
 	bool isInputEnabled() const		{ return mInputEnabled; }
 
-  private:
+	void privateBeginInterruption();
+	void privateEndInterruption( bool resumeImmediately );
 
+ private:
 	const DeviceRef&				getRemoteIODevice();
-	void							activateSession();
 	std::string						getSessionCategory();
-
-	AudioSessionInterruptionHandlerImpl *getSessionInterruptionHandler();
-
+	
+	void							activateSession();
 
 	DeviceRef mRemoteIODevice;
-	bool mSessionIsActive, mInputEnabled;
+	bool mSessionIsActive, mInputEnabled, mInterruptionHasEnded;
 
-	AudioSessionInterruptionHandlerImpl *mSessionInterruptionHandler;
+	signals::ScopedConnection mAppDidBecomeActiveConn;
+
+	AudioSessionNotificationHandlerImpl *mSessionNotificationHandler;
 };
 
 } } } // namespace cinder::audio::cocoa

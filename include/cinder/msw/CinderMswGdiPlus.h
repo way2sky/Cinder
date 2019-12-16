@@ -35,16 +35,16 @@
 namespace cinder { namespace msw {
 
 /** Copies the contents of a Gdiplus::Bitmap to a new Surface8u. **/
-Surface8u convertGdiplusBitmap( Gdiplus::Bitmap &bitmap );
+CI_API Surface8u convertGdiplusBitmap( Gdiplus::Bitmap &bitmap );
 
 /** Translates a cinder::SurfaceChannelOrder into a Gdiplus::PixelFormat. Supports BGR, BGRX, BGRA. Returns PixelFormatUndefined on failure **/
-Gdiplus::PixelFormat surfaceChannelOrderToGdiplusPixelFormat( const SurfaceChannelOrder &sco, bool premultiplied );
+CI_API Gdiplus::PixelFormat surfaceChannelOrderToGdiplusPixelFormat( const SurfaceChannelOrder &sco, bool premultiplied );
 
 /** Translates a Gdiplus::PixelFormat \a format to a a SurfaceChannelOrder. Sets \a resultPremultiplied based on whether \a format is premultiplied. **/
-void gdiplusPixelFormatToSurfaceChannelOrder( Gdiplus::PixelFormat format, SurfaceChannelOrder *resultChannelOrder, bool *resultPremultiplied );
+CI_API void gdiplusPixelFormatToSurfaceChannelOrder( Gdiplus::PixelFormat format, SurfaceChannelOrder *resultChannelOrder, bool *resultPremultiplied );
 
 /** Creates a Gdiplus::Bitmap which wraps a Surface8u. Requires \a surface to confrom to SurfaceConstraintsGdiPlus and throw SurfaceConstraintsExc if it does not. Caller is responsible for deleting the result.**/
-Gdiplus::Bitmap* createGdiplusBitmap( const Surface8u &surface );
+CI_API Gdiplus::Bitmap* createGdiplusBitmap( const Surface8u &surface );
 
 } } // namespace cinder::msw
 
@@ -52,7 +52,7 @@ namespace cinder {
 
 class SurfaceConstraintsGdiPlus : public SurfaceConstraints {
 	virtual SurfaceChannelOrder getChannelOrder( bool alpha ) const { return ( alpha ) ? SurfaceChannelOrder::BGRA : SurfaceChannelOrder::BGR; }
-	virtual int32_t				getRowBytes( int requestedWidth, const SurfaceChannelOrder &sco, int elementSize ) const { int32_t result = requestedWidth * elementSize * sco.getPixelInc(); result += ( result & 3 ) ? ( 4 - (result&3) ) : 0; return result; }
+	virtual ptrdiff_t			getRowBytes( int32_t requestedWidth, const SurfaceChannelOrder &sco, int elementSize ) const { size_t result = requestedWidth * elementSize * sco.getPixelInc(); result += ( result & 3 ) ? ( 4 - (result&3) ) : 0; return result; }
 };
 
 } // namespace cinder

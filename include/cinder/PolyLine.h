@@ -1,13 +1,14 @@
 /*
- Copyright (c) 2010, The Barbarian Group
- All rights reserved.
+ Copyright (c) 2010, The Cinder Project
+
+ This code is intended to be used with the Cinder C++ library, http://libcinder.org
 
  Redistribution and use in source and binary forms, with or without modification, are permitted provided that
  the following conditions are met:
 
-    * Redistributions of source code must retain the above copyright notice, this list of conditions and
+ * Redistributions of source code must retain the above copyright notice, this list of conditions and
 	the following disclaimer.
-    * Redistributions in binary form must reproduce the above copyright notice, this list of conditions and
+ * Redistributions in binary form must reproduce the above copyright notice, this list of conditions and
 	the following disclaimer in the documentation and/or other materials provided with the distribution.
 
  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED
@@ -28,36 +29,43 @@
 namespace cinder {
 
 template<typename T>
-class PolyLineT {
+class CI_API PolyLineT {
   public:
 	PolyLineT() : mClosed( false ) {}
-	PolyLineT( const std::vector<T> &aPoints ) : mPoints( aPoints ), mClosed( false ) {}
-	
+	PolyLineT( const std::vector<T> &aPoints, bool closed = false ) : mPoints( aPoints ), mClosed( closed ) {}
+	PolyLineT( std::vector<T> &&aPoints, bool closed = false ) : mPoints( std::move( aPoints ) ), mClosed( closed ) {}
+
 	const std::vector<T>&	getPoints() const { return mPoints; }
 	std::vector<T>&			getPoints() { return mPoints; }
-	
+
 	// STL-like convenience functions for iterating points
 	typedef typename std::vector<T>::const_iterator	const_iterator;
 	typedef typename std::vector<T>::iterator		iterator;
 
 	size_t				size() const { return mPoints.size(); }
-	
+
 	void				push_back( const T &v ) { mPoints.push_back( v ); }
 	iterator			begin() { return mPoints.begin(); }
 	const_iterator		begin() const { return mPoints.begin(); }
 	iterator			end() { return mPoints.end(); }
-	const_iterator		end() const { return mPoints.end(); }	
-	
+	const_iterator		end() const { return mPoints.end(); }
+
 	void				setClosed( bool aClosed = true ) { mClosed = aClosed; }
 	bool				isClosed() const { return mClosed; }
+
+	//! Returns \c true if PolyLine is clockwise-oriented. If \a isColinear is non-null, it receives \c true if all points are colinear
+	bool  isClockwise( bool *isColinear = nullptr ) const;
+	//! Returns \c true if PolyLine is counterclockwise-oriented. If \a isColinear is non-null, it receives \c true if all points are colinear
+	bool  isCounterclockwise( bool *isColinear = nullptr ) const;
 
 	T			getPosition( float t ) const;
 	T			getDerivative( float t ) const;
 
-	void		scale( const T &scaleFactor, T scaleCenter = T() );
-	void		offset( const T &offsetBy );
-	void		reverse();
-	
+	void			scale( const T &scaleFactor, T scaleCenter = T() );
+	PolyLineT<T>	scaled( const T &scaleFactor, T scaleCenter = T() ) const;
+	void			offset( const T &offsetBy );
+	PolyLineT<T>	getOffset( const T &offsetBy ) const;
+	void			reverse();
 	PolyLineT<T>	reversed() const;
 
 	//! Returns whether the point \a pt is contained within the boundaries of the PolyLine
@@ -68,16 +76,7 @@ class PolyLineT {
 	//! Returns the centroid or "center of mass" of the polygon. Assumes closed and no self-intersections.
 	T		calcCentroid() const;
 
-	//! Calculates the boolean union of \a a and \a b. Assumes the first PolyLine in the vector is the outermost and the (optional) others are holes.
-	static std::vector<PolyLineT> 	calcUnion( const std::vector<PolyLineT> &a, std::vector<PolyLineT> &b );
-	//! Calculates the boolean intersection of \a a and \a b. Assumes the first PolyLine in the vector is the outermost and the (optional) others are holes.
-	static std::vector<PolyLineT> 	calcIntersection( const std::vector<PolyLineT> &a, std::vector<PolyLineT> &b );
-	//! Calculates the boolean XOR (symmetric difference) of \a a and \a b. Assumes the first PolyLine in the vector is the outermost and the (optional) others are holes.
-	static std::vector<PolyLineT> 	calcXor( const std::vector<PolyLineT> &a, std::vector<PolyLineT> &b );
-	//! Calculates the boolean difference of \a a and \a b. Assumes the first PolyLine in the vector is the outermost and the (optional) others are holes.
-	static std::vector<PolyLineT> 	calcDifference( const std::vector<PolyLineT> &a, std::vector<PolyLineT> &b );
-
-	friend std::ostream& operator<<( std::ostream& lhs, const PolyLineT& rhs )
+	friend CI_API std::ostream& operator<<( std::ostream& lhs, const PolyLineT& rhs )
 	{
 		lhs << "(";
 		for( const auto &it : rhs.mPoints )
@@ -93,8 +92,5 @@ class PolyLineT {
 typedef PolyLineT<vec2>		PolyLine2;
 typedef PolyLineT<vec2>		PolyLine2f;
 typedef PolyLineT<dvec2>	PolyLine2d;
-typedef PolyLineT<vec3>		PolyLine3;
-typedef PolyLineT<vec3>		PolyLine3f;
-typedef PolyLineT<dvec3>	PolyLine3d;
 
 } // namespace cinder

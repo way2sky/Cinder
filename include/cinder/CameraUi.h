@@ -30,7 +30,7 @@
 namespace cinder {
 
 //! Enables user interaction with a CameraPersp via the mouse
-class CameraUi {
+class CI_API CameraUi {
  public:
 	CameraUi();
 	//! Constructs a CameraUi which manipulates \a camera directly (and consequently expects its pointer to remain valid). Optionally attaches to mouse/window signals of \a window, with priority \a signalPriority.
@@ -44,6 +44,8 @@ class CameraUi {
 	void connect( const app::WindowRef &window, int signalPriority = 0 );
 	//! Disconnects all signal handlers
 	void disconnect();
+	//! Returns whether the CameraUi is connected to mouse and window signal handlers
+	bool isConnected() const;
 	//! Sets whether the CameraUi will modify its CameraPersp either through its Window signals or through the various mouse*() member functions. Does not prevent resize handling.
 	void enable( bool enable = true )	{ mEnabled = enable; }
 	//! Prevents the CameraUi from modifying its CameraPersp either through its Window signals or through the various mouse*() member functions. Does not prevent resize handling.
@@ -59,10 +61,10 @@ class CameraUi {
 	void mouseWheel( app::MouseEvent &event );
 	void mouseDrag( app::MouseEvent &event );
 
-	void mouseDown( const ivec2 &mousePos );
-	void mouseUp( const ivec2 &mousePos );
+	void mouseDown( const vec2 &mousePos );
+	void mouseUp( const vec2 &mousePos );
 	void mouseWheel( float increment );
-	void mouseDrag( const ivec2 &mousePos, bool leftDown, bool middleDown, bool rightDown );
+	void mouseDrag( const vec2 &mousePos, bool leftDown, bool middleDown, bool rightDown );
 
 	//! Returns a reference to the currently controlled CameraPersp
 	const	CameraPersp& getCamera() const		{ return *mCamera; }
@@ -87,7 +89,7 @@ class CameraUi {
 
 	ivec2	getWindowSize() const;
  
-	ivec2				mInitialMousePos;
+	vec2				mInitialMousePos;
 	CameraPersp			mInitialCam;
 	CameraPersp			*mCamera;
 	float				mInitialPivotDistance;
@@ -98,8 +100,7 @@ class CameraUi {
 	app::WindowRef			mWindow;
 	bool					mEnabled;
 	int						mSignalPriority;
-	signals::Connection		mMouseDownConnection, mMouseUpConnection, mMouseDragConnection, mMouseWheelConnection;
-	signals::Connection		mWindowResizeConnection;
+	std::vector<ci::signals::Connection>	mConnections;
 	signals::Signal<void()>	mSignalCameraChange;
 };
 

@@ -42,7 +42,7 @@ typedef std::shared_ptr<class FilePlayerNode>				FilePlayerNodeRef;
 //! SamplePlayerNode itself doesn't process any audio, but contains the common interface for InputNode's that do.
 //! The ChannelMode is set to Node::ChannelMode::SPECIED and it always matches the sample's number of channels (or is equal to 1 if there is no source).
 //! \see BufferPlayerNode, FilePlayerNode
-class SamplePlayerNode : public InputNode {
+class CI_API SamplePlayerNode : public InputNode {
   public:
 	virtual ~SamplePlayerNode() {}
 
@@ -100,7 +100,7 @@ class SamplePlayerNode : public InputNode {
 };
 
 //! Buffer-based SamplePlayerNode, where all samples are loaded into memory before playback.
-class BufferPlayerNode : public SamplePlayerNode {
+class CI_API BufferPlayerNode : public SamplePlayerNode {
   public:
 	//! Constructs a BufferPlayerNode without a buffer, with the assumption one will be set later. \note Format::channels() can still be used to allocate the expected channel count ahead of time.
 	BufferPlayerNode( const Format &format = Format() );
@@ -111,9 +111,9 @@ class BufferPlayerNode : public SamplePlayerNode {
 
 	void seek( size_t readPositionFrames ) override;
 
-	//! Loads and stores a reference to a Buffer created from the entire contents of \a sourceFile.
+	//! Loads and stores a reference to a Buffer created from the entire contents of \a sourceFile. Resets the loop points to 0:getNumFrames()).
 	void loadBuffer( const SourceFileRef &sourceFile );
-	//! Sets the current Buffer. Safe to do while enabled.
+	//! Sets the current Buffer. Safe to do while enabled. Resets the loop points to 0:getNumFrames()).
 	void setBuffer( const BufferRef &buffer );
 	//! returns a shared_ptr to the current Buffer.
 	const BufferRef& getBuffer() const	{ return mBuffer; }
@@ -126,7 +126,7 @@ class BufferPlayerNode : public SamplePlayerNode {
 };
 
 //! File-based SamplePlayerNode, where samples are constantly streamed from file. Suitable for large audio files.
-class FilePlayerNode : public SamplePlayerNode {
+class CI_API FilePlayerNode : public SamplePlayerNode {
   public:
 	//! Constructs a FilePlayerNode with optional \a format.
 	FilePlayerNode( const Format &format = Format() );
@@ -140,7 +140,7 @@ class FilePlayerNode : public SamplePlayerNode {
 	//! Returns whether reading occurs asynchronously (default is false). If true, file reading is done from an internal thread, if false it is done directly on the audio thread.
 	bool isReadAsync() const	{ return mIsReadAsync; }
 
-	//! \note \a sourceFile's samplerate is forced to match this Node's Context.
+	//! \note \a sourceFile's samplerate is forced to match this Node's Context. Resets the loop points to 0:getNumFrames()).
 	void setSourceFile( const SourceFileRef &sourceFile );
 	const SourceFileRef& getSourceFile() const	{ return mSourceFile; }
 

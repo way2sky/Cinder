@@ -23,7 +23,7 @@
 
 #pragma once
 
-#if defined( CINDER_MSW )
+#if defined( CINDER_MSW_DESKTOP )
 	#include <windows.h>
 	#undef min
 	#undef max
@@ -35,12 +35,11 @@ namespace cinder { namespace app {
 
 class AppBase;
 class AppImplMswBasic;
+class WindowImplMsw;
 
 class RendererImplMsw {
  public:
-#if defined( CINDER_MSW )
-	virtual bool	initialize( HWND wnd, HDC dc, RendererRef sharedRenderer ) = 0;
-#elif defined( CINDER_WINRT)
+#if defined( CINDER_UWP )
 	virtual bool	initialize( ::Platform::Agile<Windows::UI::Core::CoreWindow> wnd, RendererRef sharedRenderer ) = 0;
 #endif
 	virtual void	prepareToggleFullScreen() {}
@@ -51,8 +50,7 @@ class RendererImplMsw {
 	virtual void	makeCurrentContext( bool force = false ) = 0;
 
  protected:
-  #if defined( CINDER_MSW )
-	HWND				mWnd;
+  #if defined( CINDER_MSW_DESKTOP )
   #else
 	::Platform::Agile<Windows::UI::Core::CoreWindow>		mWnd;
   #endif

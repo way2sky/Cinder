@@ -39,7 +39,7 @@ namespace cinder {
 
 namespace cinder { namespace app {
 
-class Platform {
+class CI_API Platform {
   public:
 	virtual ~Platform()	{}
 
@@ -55,9 +55,9 @@ class Platform {
 
 	// Assets
 	//! Returns a DataSourceRef to an application asset. Throws a AssetLoadExc on failure.
-	DataSourceRef			loadAsset( const fs::path &relativePath );
+	virtual DataSourceRef	loadAsset( const fs::path &relativePath );
 	//! Returns a fs::path to an application asset. Returns an empty path on failure.
-	fs::path				getAssetPath( const fs::path &relativePath ) const;
+	virtual fs::path		getAssetPath( const fs::path &relativePath ) const;
 	//! Adds an absolute path to the list of directories which are searched for assets.
 	//! \note Not thread-safe, e.g. you should not call this when loadAsset() or getAssetPath() can occur from a different thread.
 	void					addAssetDirectory( const fs::path &directory );
@@ -65,17 +65,17 @@ class Platform {
 	const std::vector<fs::path>&	getAssetDirectories() const;
 
 	// Resources
-#if defined( CINDER_MSW )
+#if defined( CINDER_MSW_DESKTOP )
 	//! (MSW only) Returns a DataSource to an application resource. \a mswID and \a mswType identify the resource as defined the application's .rc file(s). \sa \ref CinderResources
 	virtual DataSourceRef	loadResource( const fs::path &resourcePath, int mswID, const std::string &mswType ) = 0;
 #else
 	//! Returns a DataSource to an application resource. \a resourcePath is defined on a per-platform basis. \sa \ref CinderResources
 	virtual DataSourceRef	loadResource( const fs::path &resourcePath ) = 0;
-#endif // defined( CINDER_MSW )
+#endif // defined( CINDER_MSW_DESKTOP )
 
 	//! Returns the absolute file path to the resources folder. Returns an empty fs::path on windows. \sa CinderResources
 	virtual fs::path	getResourceDirectory() const = 0;
-	//! Returns the absolute file path to a resource located at \a rsrcRelativePath inside the bundle's resources folder. Throws ResourceLoadExc on failure. \sa CinderResources
+	//! Returns the absolute file path to a resource located at \a rsrcRelativePath inside the bundle's resources folder. Returns an empty fs::path on windows. Throws ResourceLoadExc on failure. \sa CinderResources
 	virtual fs::path	getResourcePath( const fs::path &rsrcRelativePath ) const = 0;
 
 	//! Returns the path to the associated executable
@@ -83,7 +83,7 @@ class Platform {
 	//! Sets the path to the associated executable, overriding the default
 	void				setExecutablePath( const fs::path &execPath )	{ mExecutablePath = execPath; }
 
-#if defined( CINDER_WINRT )
+#if defined( CINDER_UWP )
 	//! Presents the user with an open-file dialog and returns the selected file path. \a callback is called with the file selected asynchronously.
 	//! The dialog optionally begins at the path \a initialPath and can be limited to allow selection of files ending in the extensions enumerated in \a extensions. An empty result implies cancellation.
 	virtual void getOpenFilePathAsync( const std::function<void(const fs::path&)> &callback, const fs::path &initialPath = fs::path(), const std::vector<std::string> &extensions = {} ) = 0;
@@ -129,6 +129,9 @@ class Platform {
 	//! Returns a stack trace (aka backtrace) where \c stackTrace()[0] == caller, \c stackTrace()[1] == caller's parent, etc
 	virtual std::vector<std::string>		stackTrace() = 0;
 
+	//! Sets the name of the current thread to \a name
+	virtual void setThreadName( const std::string &name ) = 0;
+
 	//! Returns a std::vector of Displays connected to the system.
 	virtual const std::vector<DisplayRef>&	getDisplays() = 0;
 
@@ -141,8 +144,8 @@ class Platform {
 	virtual void	findAndAddDefaultAssetPath();
 
   private:
-	void		initialize();
-	void		initAssetDirectories();
+	void			initialize();
+	void			initAssetDirectories();
 
 	std::vector<fs::path>		mAssetDirectories;
 	mutable fs::path			mExecutablePath; // lazily defaulted if none exists
@@ -150,7 +153,7 @@ class Platform {
 
 
 //! Exception for failed resource loading
-class ResourceLoadExc : public Exception {
+class CI_API ResourceLoadExc : public Exception {
   public:
 
 	ResourceLoadExc( const fs::path &resourcePath );
@@ -159,7 +162,7 @@ class ResourceLoadExc : public Exception {
 };
 
 //! Exception for failed asset loading
-class AssetLoadExc : public Exception {
+class CI_API AssetLoadExc : public Exception {
 public:
 	AssetLoadExc( const fs::path &relativePath );
 };

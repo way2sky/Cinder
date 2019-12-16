@@ -24,14 +24,16 @@
 
 #pragma once
 
+#include "cinder/Camera.h"
 #include "cinder/Quaternion.h"
 #include "cinder/Vector.h"
 #include "cinder/Sphere.h"
 #include "cinder/app/MouseEvent.h"
+#include "cinder/app/Window.h"
 
 namespace cinder {
 
-class Arcball {
+class CI_API Arcball {
  public:
 	Arcball()
 		: mCamera( nullptr ), mUseConstraint( false )
@@ -49,7 +51,7 @@ class Arcball {
 		mouseDown( event.getPos(), event.getWindow()->getSize() );
 	}
 	
-	void mouseDown( const ivec2 &mousePos, const ivec2 &windowSize )
+	void mouseDown( const vec2 &mousePos, const ivec2 &windowSize )
 	{
 		mInitialMousePos = mousePos;
 		mInitialQuat = mCurrentQuat;
@@ -62,7 +64,7 @@ class Arcball {
 		mouseDrag( event.getPos(), event.getWindow()->getSize() );
 	}
 	
-	void mouseDrag( const ivec2 &mousePos, const ivec2 &windowSize )
+	void mouseDrag( const vec2 &mousePos, const ivec2 &windowSize )
 	{
 		float addition;
 		mouseOnSphere( mousePos, windowSize, &mToVector, &addition );
@@ -91,7 +93,7 @@ class Arcball {
 	bool		isUsingConstraint() const							{ return mUseConstraint; }
 	const vec3&	getConstraintAxis() const							{ return mConstraintAxis; }
 	
-	void mouseOnSphere( const ivec2 &point, const ivec2 &windowSize, vec3 *resultVector, float *resultAngleAddition )
+	void mouseOnSphere( const vec2 &point, const ivec2 &windowSize, vec3 *resultVector, float *resultAngleAddition )
 	{
 		float rayT;
 		Ray ray = mCamera->generateRay( point, windowSize );
@@ -152,7 +154,7 @@ class Arcball {
 	}
 
 	CameraPersp	*mCamera;
-	ivec2		mInitialMousePos;
+	vec2		mInitialMousePos;
 	quat		mCurrentQuat, mInitialQuat;
 	Sphere		mSphere;
 	vec3		mFromVector, mToVector, mConstraintAxis;

@@ -29,7 +29,7 @@
 
 namespace cinder { namespace app {
 
-class PlatformMsw : public Platform {
+class CI_API PlatformMsw : public Platform {
   public:
 	PlatformMsw();
 	static PlatformMsw*		get() { return reinterpret_cast<PlatformMsw*>( Platform::get() ); }
@@ -37,7 +37,7 @@ class PlatformMsw : public Platform {
 	DataSourceRef	loadResource( const fs::path &resourcePath, int mswID, const std::string &mswType ) override;
 
 	fs::path getResourceDirectory() const override									{ return fs::path(); }
-	fs::path getResourcePath( const fs::path &rsrcRelativePath ) const override		{ return fs::path(); }
+	fs::path getResourcePath( const fs::path &/*rsrcRelativePath*/ ) const override	{ return fs::path(); }
 
 	fs::path getOpenFilePath( const fs::path &initialPath, const std::vector<std::string> &extensions ) override;
 	fs::path getFolderPath( const fs::path &initialPath ) override;
@@ -61,6 +61,8 @@ class PlatformMsw : public Platform {
 
 	std::vector<std::string>	stackTrace() override;
 
+	void setThreadName( const std::string &name ) override;
+
 	const std::vector<DisplayRef>&	getDisplays() override;
 	void							refreshDisplays();
 	//! Returns the Display which corresponds to \a hMonitor. Returns main display on failure.
@@ -75,7 +77,7 @@ class PlatformMsw : public Platform {
 };
 
 //! MSW-specific Exception for failed resource loading, reports windows resource id and type
-class ResourceLoadExcMsw : public ResourceLoadExc {
+class CI_API ResourceLoadExcMsw : public ResourceLoadExc {
   public:
 	ResourceLoadExcMsw( int mswID, const std::string &mswType );
 };
@@ -84,7 +86,7 @@ class ResourceLoadExcMsw : public ResourceLoadExc {
 
 namespace cinder {
 
-class DisplayMsw : public Display {
+class CI_API DisplayMsw : public Display {
   public:
 	std::string		getName() const override;
 

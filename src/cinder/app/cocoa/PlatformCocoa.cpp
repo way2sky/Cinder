@@ -40,6 +40,7 @@
 #endif
 #include <cxxabi.h>
 #include <execinfo.h>
+#include <pthread.h>
 
 using namespace std;
 
@@ -363,6 +364,13 @@ vector<string> PlatformCocoa::stackTrace()
 	return result;
 }
 
+void PlatformCocoa::setThreadName( const std::string &name )
+{
+	int result = pthread_setname_np( name.c_str() ); // under macOS, arbitrarily long strings appear to be acceptable
+	if( result != 0 )
+		CI_LOG_E( "setThreadName failed" );
+}
+
 void PlatformCocoa::addDisplay( const DisplayRef &display )
 {
 	mDisplays.push_back( display );
@@ -525,7 +533,6 @@ const std::vector<DisplayRef>& app::PlatformCocoa::getDisplays()
 		size_t screenCount = [screens count];
 		for( size_t i = 0; i < screenCount; ++i ) {
 			::NSScreen *screen = [screens objectAtIndex:i];
-			[screen retain]; // this is released in the destructor for Display
 
 			DisplayMac *newDisplay = new DisplayMac();
 

@@ -23,9 +23,8 @@
 
 #pragma once
 
-#if( _WIN32_WINNT < _WIN32_WINNT_VISTA )
-	#error "WASAPI only available on Windows Vista or newer"
-#endif
+#include "cinder/Cinder.h"
+#if defined( CINDER_UWP ) || ( _WIN32_WINNT >= _WIN32_WINNT_VISTA ) // requires Windows Vista+
 
 #include "cinder/audio/Device.h"
 
@@ -37,6 +36,9 @@ namespace cinder { namespace audio { namespace msw {
 
 class DeviceManagerWasapi : public DeviceManager {
   public:
+	  DeviceManagerWasapi();
+	~DeviceManagerWasapi();
+
 	DeviceRef getDefaultOutput() override;
 	DeviceRef getDefaultInput() override;
 
@@ -51,26 +53,30 @@ class DeviceManagerWasapi : public DeviceManager {
 	void setSampleRate( const DeviceRef &device, size_t sampleRate ) override;
 	void setFramesPerBlock( const DeviceRef &device, size_t framesPerBlock ) override;
 
-	const std::wstring& getDeviceId( const DeviceRef &device );
-
 	std::shared_ptr<::IMMDevice> getIMMDevice( const DeviceRef &device );
 
   private:
-
+	  // TODO: fix formatting
 	  struct DeviceInfo {
 		  std::string mKey;						//! mKey used by Device to get more info from manager
 		  std::string mName;						//! friendly mName
 		  enum Usage { INPUT, OUTPUT } mUsage;
-		  std::wstring			mDeviceId;		//! id used when creating XAudio2 master voice
 		  std::wstring			mEndpointId;		//! id used by Wasapi / MMDevice
+		  unsigned long			mState;
 		  size_t mNumChannels, mSampleRate, mFramesPerBlock;
 	  };
 
 	  DeviceInfo& getDeviceInfo( const DeviceRef &device );
+	  void rebuildDeviceInfoSet();
 	  void parseDevices( DeviceInfo::Usage usage );
 	  std::vector<std::wstring> parseDeviceIds( DeviceInfo::Usage usage );
 
 	  std::map<DeviceRef, DeviceInfo> mDeviceInfoSet;
+
+	  struct Impl;
+	  std::unique_ptr<Impl> mImpl;
 };
 
 } } } // namespace cinder::audio::msw
+
+#endif // #if defined( CINDER_UWP ) || ( _WIN32_WINNT >= _WIN32_WINNT_VISTA ) // requires Windows Vista+
